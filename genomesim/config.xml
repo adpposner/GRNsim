@@ -1,0 +1,81 @@
+<configuration>
+
+	<globalDimensions>
+		<nMess>50</nMess>
+		<nMicro>25</nMicro>
+	</globalDimensions>
+
+	<connectionParameters>
+		<miRNAs>
+			<degree_low>3</degree_low>
+			<degree_high>12</degree_high>
+			<effectProb>0.4</effectProb>
+			<inOutDegree>in</inOutDegree>
+		</miRNAs>
+		
+		<TFs>
+			<coding>
+				<degree_low>1</degree_low>
+				<degree_high>17</degree_high>
+				<effectProb>0.3</effectProb>
+				<inOutDegree>in</inOutDegree>
+			</coding>
+			<noncoding>
+				<degree_low>0</degree_low>
+				<degree_high>1</degree_high>
+				<effectProb>0.0</effectProb>
+				<inOutDegree>in</inOutDegree>
+			</noncoding>
+		</TFs>
+
+	</connectionParameters>
+
+
+	<randomSeeds>
+		<networkGenSeed>43431</networkGenSeed>
+	</randomSeeds>
+
+	<baseRates>
+		<mess>
+			<production>1.0</production>
+			<decay>1.00</decay>
+		</mess>
+		
+		<TF>
+			<production>40.0</production>
+			<decay>0.01</decay>
+			<affinity>0.0001</affinity>
+			<frequency>1.0</frequency>
+			<effectMin>0.9</effectMin>
+			<effectMax>2.0</effectMax>
+		</TF>
+		<micro>
+			<production>2.0</production>
+			<decay>1.0</decay>
+			<affinity>0.5</affinity>
+			<frequency>4.0</frequency>
+			<effectStrength>0.01</effectStrength>
+		</micro>
+		
+		
+		<defaultRate>1.0</defaultRate>
+	</baseRates>
+	
+	<initialQuantities>
+		<coding>2</coding>
+		<noncoding>8</noncoding>
+		<mess>0</mess>
+		<micro>20</micro>
+		<TF>0</TF>
+	</initialQuantities>
+
+
+	<prices>
+		<proteinCost>1.0</proteinCost>
+		<mRNACost>1.0</mRNACost>
+		<miRNACost>1.0</miRNACost>
+	</prices>
+
+
+
+</configuration>
