@@ -1,30 +1,31 @@
 <configuration>
 
 	<globalDimensions>
-		<nMess>50</nMess>
+        <nMess>50</nMess>
 		<nMicro>25</nMicro>
 	</globalDimensions>
 
 	<connectionParameters>
 		<miRNAs>
-			<degree_low>3</degree_low>
-			<degree_high>12</degree_high>
-			<effectProb>0.4</effectProb>
+        <discrete_distribution>
+                <distribution maxVal="20" minVal="1" nSuccess="2.5" successP="0.1" type="negbinomial" weight="1.0" />
+                
+        </discrete_distribution>
 			<inOutDegree>in</inOutDegree>
 		</miRNAs>
 		
 		<TFs>
 			<coding>
-				<degree_low>1</degree_low>
-				<degree_high>17</degree_high>
-				<effectProb>0.3</effectProb>
+				<discrete_distribution>
+                <distribution maxVal="40" minVal="1" nSuccess="2.5" successP="0.24" type="negbinomial" weight="1.0" />
+                </discrete_distribution>
 				<inOutDegree>in</inOutDegree>
 			</coding>
 			<noncoding>
-				<degree_low>0</degree_low>
-				<degree_high>1</degree_high>
-				<effectProb>0.0</effectProb>
-				<inOutDegree>in</inOutDegree>
+				<discrete_distribution>
+                <distribution maxVal="40" minVal="1" nSuccess="2.5" successP="0.24" type="negbinomial" weight="1.0" />
+                </discrete_distribution>
+                <inOutDegree>in</inOutDegree>
 			</noncoding>
 		</TFs>
 
@@ -32,29 +33,34 @@
 
 
 	<randomSeeds>
-		<networkGenSeed>43431</networkGenSeed>
+		<networkGenSeed>75436</networkGenSeed>
 	</randomSeeds>
 
 	<baseRates>
 		<mess>
-			<production>1.0</production>
-			<decay>1.00</decay>
+			<production>4.0</production>
+			<decay>1.0</decay>
 		</mess>
 		
 		<TF>
-			<production>40.0</production>
+			<production>200.0</production>
 			<decay>0.01</decay>
 			<affinity>0.0001</affinity>
 			<frequency>1.0</frequency>
-			<effectMin>0.9</effectMin>
-			<effectMax>2.0</effectMax>
+			<effect>
+            <continuous_distribution>
+				<distribution displacement="0.4" mu="3.0" scale="0.75" sigma="1.25" type="lognormal" weight="1.0" />
+            </continuous_distribution>
+            </effect>
+			
 		</TF>
 		<micro>
-			<production>2.0</production>
-			<decay>1.0</decay>
+			<production>6.25</production>
+			<decay>0.5</decay>
 			<affinity>0.5</affinity>
 			<frequency>4.0</frequency>
-			<effectStrength>0.01</effectStrength>
+            <prodEffectStrength>0.2302585092994046</prodEffectStrength>
+            <decayEffectStrength>2.5</decayEffectStrength>
 		</micro>
 		
 		
@@ -63,7 +69,7 @@
 	
 	<initialQuantities>
 		<coding>2</coding>
-		<noncoding>8</noncoding>
+		<noncoding>4</noncoding>
 		<mess>0</mess>
 		<micro>20</micro>
 		<TF>0</TF>
@@ -76,6 +82,21 @@
 		<miRNACost>1.0</miRNACost>
 	</prices>
 
-
+    <kinetics>
+        <TXC>
+        <K_ONE_HALF value="6.0" />
+        <PROD_EXPONENT value="1.0" />
+        </TXC>
+        <TXL>
+            <K_ONE_HALF value="5.0" />
+            <PROD_EXPONENT value="1.0" />
+        </TXL>
+        <MESS_DECAY>
+            <K_ONE_HALF value="5.0" />
+            <EXPONENT value="1.0" />
+        </MESS_DECAY>
+        <MESSENGERDECAYFORCESMICRODECAY value="True" />
+        <MESSENGERDECAYFORCESMICROUNBINDING value="False" />
+    </kinetics>
 
 </configuration>

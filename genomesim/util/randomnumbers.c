@@ -1,24 +1,6 @@
-// Reactionrates.c -Calculating reaction rates and times to events (ttes)
-/*
-    
-    Copyright (C) 2018, Russell Posner
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-*/
-
 #include "../include/randomnumbers.h"
 #include "../include/globals.h"
 #include <string.h>
-#include <mkl.h>
-#include <float.h>
 
 
 #define RANDARR_MAX	100
@@ -29,31 +11,23 @@ numeric_t_rp * currLogOneMinusUPos = logOneMinusU;
 
 VSLStreamStatePtr stream;
 
+VSLStreamStatePtr getStream(){
+    return stream;
+}
 
-#ifdef DOUBLE_PRECISION_RP
+
  void vLnBuf(numeric_t_rp * srcDest) {
-	vdLn(RND_NUM_BUF_SZ,srcDest,srcDest);
+	vNumberLn(RND_NUM_BUF_SZ,srcDest,srcDest);
 }
  void vScalMinus1(numeric_t_rp *srcDest){
-	cblas_dscal(RND_NUM_BUF_SZ, -1.0, srcDest, 1);
-}
-#else
- void vLnBuf(numeric_t_rp * srcDest) {
-	vsLn(RND_NUM_BUF_SZ,srcDest,srcDest);
-}
- void vScalMinus1(numeric_t_rp *srcDest){
-	cblas_sscal(RND_NUM_BUF_SZ, -1.0, srcDest, 1);
+	cblas_numscal(RND_NUM_BUF_SZ, -1.0, srcDest, 1);
 }
 
-#endif
 
-void randomUniformDoubleArray(size_t nElems,double min,double max,double *dest){
-	vdRngUniform(VSL_RNG_METHOD_UNIFORM_STD, stream, nElems,dest,min,max);
+void randomUniformNumberArray(size_t nElems,numeric_t_rp min,numeric_t_rp max,numeric_t_rp *dest){
+	vNumberRngUniform(VSL_RNG_METHOD_UNIFORM_STD, stream, nElems,dest,min,max);
 }
 
-void randomUniformSingleArray(size_t nElems,float min,float max, float * dest){
-	vsRngUniform(VSL_RNG_METHOD_UNIFORM_STD, stream, nElems, dest, min, max);
-}
 
 
 static  void regenLogOneMinusUBuf() {
@@ -74,6 +48,9 @@ static void generateRndBufs();
 
 void randomnumbers_init(int seed) {
 	assert(seed != 0);
+    if(seed < 0)
+        {fprintf(stderr,"seed not initialized!");
+        exit(4958);}
 	if(randomnumbers_initd) 
 		randomnumbers_free();
 	#ifdef FIXSEED
@@ -128,34 +105,13 @@ void randomNonUniqueIntArray(size_t nElems,size_t nMin, size_t nMax, unsigned *d
 }
 
 
- double getNextExponentialDouble(double rate) {
-	if(currLogOneMinusUPos == logOneMinusUEnd){
-		regenLogOneMinusUBuf();
-	}
-	return (*currLogOneMinusUPos++)/rate;
-}
 
- float getNextExponentialSingle(float rate) {
-	if(currLogOneMinusUPos == logOneMinusUEnd){
-		regenLogOneMinusUBuf();
-	}
-	return (*currLogOneMinusUPos++)/rate;
-}
-
-void randomUniformNumberArray(size_t nElems,effect_t_rp min, effect_t_rp max,effect_t_rp *dest){
-#ifdef DOUBLE_PRECISION_RP
-randomUniformDoubleArray(nElems, min, max, dest);
-#else
-randomUniformSingleArray(nElems, min, max, dest);
-#endif	
-}
 
 rate_t_rp getNextExponential(rate_t_rp rate){
-#ifdef DOUBLE_PRECISION_RP
-return getNextExponentialDouble(rate);
-#else
-return getNextExponentialSingle(rate);
-#endif	
+	if(currLogOneMinusUPos == logOneMinusUEnd){
+		regenLogOneMinusUBuf();
+	}
+	return (*currLogOneMinusUPos++)/rate;
 }
 
 unsigned bindingPositionBuf[RND_NUM_BUF_SZ];
@@ -183,7 +139,7 @@ static  void generateRndBufs(){
 	regenBindingPositionBuf();
 }
 
-void randomBinomialArray(size_t len, size_t d_low,size_t d_high,double p, unsigned * dest) {
+void randomBinomialArray(size_t len, size_t d_low,size_t d_high,numeric_t_rp p, unsigned * dest) {
 	if (d_high == d_low)
 	{
 		*dest=d_high;
@@ -193,29 +149,6 @@ void randomBinomialArray(size_t len, size_t d_low,size_t d_high,double p, unsign
 	int i;
 	for(i=0;i<len;i++)
 		dest[i]+=d_low;
-}
-
-void randomBimodalBinomialArray(size_t len, size_t d_low, size_t d_high, double p1, double p2, double p_select,
- unsigned * dest) {
-	unsigned * dest2;
-	unsigned * select_dest;
-	if (d_high == d_low)
-	{
-		*dest=d_high;
-		return;
-	}
-	dest2 = calloc(len, sizeof(*dest2));
-	select_dest = calloc(len,sizeof(*select_dest));
-
-	viRngBinomial(VSL_RNG_METHOD_BINOMIAL_BTPE, stream, len, (int *) dest, d_high-d_low, p1);
-	viRngBinomial(VSL_RNG_METHOD_BINOMIAL_BTPE, stream, len, (int *) dest2, d_high-d_low,p2);
-	viRngBernoulli(VSL_RNG_METHOD_BERNOULLI_ICDF, stream, len, (int *) select_dest, p_select);
-	for(;len;len--){
-		dest[len-1] = (select_dest[len-1] ? dest2[len-1] : dest[len-1]) + d_low; 
-	}
-
-	free(select_dest);
-	free(dest2);
 }
 
 
@@ -244,6 +177,7 @@ size_t sumArray(size_t len, int *arr) {
 
 void shuffleuCharArray(unsigned char * data, const size_t len){
 	int i,j;
+	unsigned char *d1, *d2;
 	unsigned char tmp;
 	for(i=len-1;i>0;i--){
 		rand_int(i+1,&j);
@@ -256,7 +190,7 @@ void shuffleuCharArray(unsigned char * data, const size_t len){
 void randomBoolArray(size_t nElems,unsigned int nOnes,unsigned char * dest){
 	if (nOnes > nElems){
 		fprintf(stderr,"%s:%d - trying to set more miRs active than exist in system, \
-			requested %u, setting nactive to nmicro = %zu\n",__FILE__,__LINE__,nOnes,nElems);
+			setting nactive to nmicro = %zu\n",__FILE__,__LINE__,nElems);
 		nOnes=nElems;
 	}
 	memset(dest, 0, nElems);

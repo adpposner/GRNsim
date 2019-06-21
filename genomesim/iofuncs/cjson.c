@@ -1,5 +1,3 @@
-//cJSON source by Dave Gamble under MIT license
-//https://github.com/DaveGamble/cJSON
 /*
   Copyright (c) 2009 Dave Gamble
 

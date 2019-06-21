@@ -1,25 +1,11 @@
-// Event.h - public facing component of the event updates
-// Event.c contains all functions called by executeReaction, which are stored within
-// and make heavy use of inlining  & other optimizations
-/*
-    
-    Copyright (C) 2018, Russell Posner
+#ifndef EVENT_H__
+#define EVENT_H__
 
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-*/
-#ifndef EVENT_H_RP__
-#define EVENT_H_RP__
 
-struct minHeapNodeArray;
 
-void executeReaction(struct minHeapNodeArray *mH);
+struct minHeapSoA;
+
+void executeReaction(struct minHeapSoA *mH);
 void printTotals();
 #endif

@@ -1,18 +1,4 @@
-// modelloader.c - source for interface between model generation and model simulation
-/*
-    
-    Copyright (C) 2018, Russell Posner
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-*/
+#include <string.h>
 #include "../include/modelloader.h"
 #include "../include/models.h"
 #include "../include/randomnumbers.h"
@@ -98,13 +84,12 @@ void model_loader_init(SimulationComponents * sim,SimOpts * opts){
 	else
 		setRandomMiRNAsActive(sim->g, opts->nactiveMirs);
     char  * tmpfilepath;
-    tmpfilepath = writeTempGenesList(sim->g,opts->jsonFile_,opts->dataOutputDir_);
-	//char * filePath = writeGenesList(sim->g, SKIP_DISABLED, opts->jsonFile_);
+    //tmpfilepath = writeTempGenesList(sim->g,opts->jsonFile_,opts->dataOutputDir_);
+	char * filePath = writeGenesList(sim->g, SKIP_DISABLED, opts->jsonFile_,opts->nactiveMirs,miRsStatesToString());
    // fprintf(stdout,"%s:%d\t tmp file path = %s\n",__FILE__,__LINE__,tmpfilepath);
 	genesList_free(sim->g);
-	sim->g = readGenesList(tmpfilepath);	
+	sim->g = readGenesList(filePath);	
 }
-
 
 
 #include "../include/iofuncs.h"

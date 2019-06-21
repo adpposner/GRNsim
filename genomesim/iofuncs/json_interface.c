@@ -1,18 +1,3 @@
-//json_interface.c - source for JSON I/O, using cJSON library
-/*
-    
-    Copyright (C) 2018, Russell Posner
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-*/
 #include "../include/models/basicgeneticelement_p.h"
 #include "../include/models/basicgeneticelement.h"
 
@@ -117,7 +102,21 @@ cJSON * producer_toJSON(Producer *elem){
 	return toRet;
 }
 
+// Producer emptyProducer() {return (Producer) {.productionConstant = 0.0,
+// .decayConstant = 0.0, .produces = NULL};}
 
+// typedef struct ProducerElement {
+// 	ElementInfo
+// 	rate_t_rp decayConstant;
+// 	struct {
+// 		rate_t_rp productionConstant;
+// 		pmbPtr produces;
+// 		occ_bits_rp * occupancies;
+// 		BoundElementArray boundelts;
+// 		ProducerRxns reactions;
+// 	};
+	
+// } Producer;
 
 
 static Producer producerBase_fromJSON(cJSON *obj){
@@ -137,6 +136,11 @@ static Modulator modulatorBase_fromJSON(cJSON *obj){
 	Modulator toRet;
 	InfoFromJson(toRet, obj);
 	toRet.decayConstant = cJSON_GetObjectItem(obj, "decayConstant")->valuedouble;
+	toRet.productionEffect = cJSON_GetObjectItem(obj,"productionEffectStrength")->valuedouble;
+	if(toRet.species == PROTEIN){
+		toRet.decayEffect = 0.0;
+	}else
+		toRet.decayEffect = cJSON_GetObjectItem(obj,"decayEffectStrength")->valuedouble;
 	toRet.boundelts = emptyBoundElementPtrArray();
 	toRet.bindings = emptyReactionPtrArray();
 	return toRet;
@@ -151,7 +155,8 @@ static BoundElement boundBase_fromJSON(cJSON *obj){
 	toRet.unbinding = NULL;
 	toRet.assocConstant = cJSON_GetObjectItem(obj, "assocConstant")->valuedouble;
 	toRet.dissocConstant = cJSON_GetObjectItem(obj, "dissocConstant")->valuedouble;
-	toRet.effectStrength = cJSON_GetObjectItem(obj, "effectStrength")->valuedouble;
+	toRet.prodEffectStrength = cJSON_GetObjectItem(obj, "prodEffectStrength")->valuedouble;
+	toRet.decayEffectStrength = cJSON_GetObjectItem(obj, "decayEffectStrength")->valuedouble;
 	#ifdef BOUNDDECAY
 	toRet.decayConstant = cJSON_GetObjectItem(obj, "decayConstant")->valuedouble;
 	#endif
@@ -178,7 +183,6 @@ static ModulatorArray modulatorArrayBase_fromJSON(cJSON *arr){
 	ModulatorArray toRet;
 	cJSON *item;
 	ulong_type len = cJSON_GetArraySize(arr);
-
 	toRet = ModulatorArray_alloc(len);
 	ModulatorArrayIters mIt = getModulatorArrayIters(&toRet);
 	mIt.curr=mIt.start;
@@ -193,7 +197,6 @@ static BoundElementArray boundArrayBase_fromJSON(cJSON *arr){
 	BoundElementArray toRet;
 	cJSON *item;
 	ulong_type len = cJSON_GetArraySize(arr);
-
 	toRet = BoundElementArray_alloc(len);
 	BoundElementArrayIters bIt = getBoundElementArrayIters(&toRet);
 	bIt.curr=bIt.start;
@@ -205,12 +208,22 @@ static BoundElementArray boundArrayBase_fromJSON(cJSON *arr){
 }
 
 
+// typedef struct ModulatorElement {
+// 	ElementInfo
+// 	rate_t_rp decayConstant;
+// 	BoundElementPtrArray boundelts;
+// 	Reaction * selfDecay;
+// 	ReactionPtrArray bindings;
+// } Modulator;
 
 static cJSON * modulator_toJSON(Modulator *elem){
 	cJSON * toRet;
 	toRet = cJSON_CreateObject();
 	InfoToJson(elem, toRet);
 	cJSON_AddNumberToObject(toRet, "decayConstant", elem->decayConstant);
+	cJSON_AddNumberToObject(toRet,"productionEffectStrength",elem->productionEffect);
+	if(elem->species == MICRO)
+		cJSON_AddNumberToObject(toRet,"decayEffectStrength",elem->decayEffect);
 	cJSON_AddItemToObject(toRet, "boundelts", modulatorBounds_toJSON(elem));
 	return toRet;
 }
@@ -223,10 +236,8 @@ static cJSON * bound_toJSON(BoundElement *bd){
 	cJSON_AddNumberToObject(toRet, "right", bd->right->id);
 	cJSON_AddNumberToObject(toRet, "assocConstant", bd->assocConstant);
 	cJSON_AddNumberToObject(toRet, "dissocConstant", bd->dissocConstant);
-	cJSON_AddNumberToObject(toRet, "effectStrength", bd->effectStrength);
-	#ifdef BOUNDDECAY
-	cJSON_AddNumberToObject(toRet, "decayConstant", bd->decayConstant);
-	#endif
+	cJSON_AddNumberToObject(toRet, "prodEffectStrength", bd->prodEffectStrength);
+	cJSON_AddNumberToObject(toRet, "decayEffectStrength", bd->decayEffectStrength);
 	return toRet;
 }
 
@@ -339,6 +350,11 @@ pmbPtrArray buildIDIndex(GenesList *g){
 	return toRet;	
 }
 
+static  pmbPtr getPtrForID(ulong_type id, pmbPtrArray *idx){
+	pmbPtr toRet;
+	toRet = idx->data[id];
+	return toRet;
+}
 
 static void connectProduces(Producer *p,cJSON * pObj,pmbPtrArray *idx) {
 	//first connect

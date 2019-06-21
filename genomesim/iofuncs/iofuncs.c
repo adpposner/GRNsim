@@ -1,19 +1,5 @@
-//iofuncs.c - source for file I/O for both netgen and sim
-/*
-    
-    Copyright (C) 2018, Russell Posner
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-*/
 #include "../include/iofuncs/iofuncs.h"
+#include "../include/iofuncs/graph_interface.h"
 #include "../include/iofuncs/json_interface.h"
 #include "../include/globals.h"
 #include "../include/models/geneslist_p.h"
@@ -46,7 +32,7 @@ struct miniStat stRNA, stProt,stOutput;
 int idxLast=0;
 
 
-
+#define DEGREESTRINGBUFLEN	5000
 
 pmbPtrArray generateMessengerPtrArray(GenesList *g){
 	pmbPtrArray toRet = pmbPtrArray_alloc(g->nMess);
@@ -72,25 +58,94 @@ pmbPtrArray generateProteinPtrArray(GenesList *g){
 	return toRet;
 }
 
-void printDegrees(GenesList *g){
+pmbPtrArray generateDNAPtrArray(GenesList *g){
+	pmbPtrArray toRet = pmbPtrArray_alloc(g->nDNA);
+	pmbPtrArrayIters it = getpmbPtrArrayIters(&toRet);
+	ProducerArrayIters pit = getProducerArrayIters(&g->producers);
+	ARRAY_TYPE_FOREACH(pit){
+		if(pit.curr->species & DNA)
+			*it.curr++ = (pmbPtr){.producer = pit.curr, .species = pit.curr->species};
+	}
+	assert(it.curr==it.end);
+	return toRet;
+}
+
+void printDegrees(FILE * degOut, GenesList *g){
+    
 	pmbPtrArray messes = generateMessengerPtrArray(g);
 	pmbPtrArrayIters messIt = getpmbPtrArrayIters(&messes);
 	FILE * degreesOut;
-	degreesOut = fopen(stProt.degreeFileName, "w");
+	if(!degOut)
+		degreesOut = fopen(stProt.degreeFileName, "w");
+	else
+		degreesOut = degOut;
+	//fprintf()
+	fprintf(degreesOut,"name\t");
 	ARRAY_TYPE_FOREACH(messIt){
 		fprintf(degreesOut,"%s\t",messIt.curr->producer->produces.modulator->name);
 	}
 	fputc('\n', degreesOut);
+	fprintf(degreesOut,"mRNA_indegree\t");
 	ARRAY_TYPE_FOREACH(messIt){
 		fprintf(degreesOut,ltf_rp"\t",getIndegree_mess(messIt.curr->producer));
 	}
-	fputc('\n',degreesOut);
+	fputc('\n', degreesOut);
+	char baseProds[DEGREESTRINGBUFLEN];
+	char maxProds[DEGREESTRINGBUFLEN];
+	char baseDecays[DEGREESTRINGBUFLEN];
+	char maxDecays[DEGREESTRINGBUFLEN];
+	char * bP = baseProds;
+	char * mP = maxProds;
+	char * bD = baseDecays;
+	char * mD = maxDecays;
+	numeric_t_rp baseProdVal, baseDecayVal,maxProdVal,maxDecayVal;
+	bP += snprintf(bP,DEGREESTRINGBUFLEN,"mRNA_baseProduction\t");
+	mP += snprintf(mP,DEGREESTRINGBUFLEN,"mRNA_maxProduction\t");
+	bD += snprintf(bD,DEGREESTRINGBUFLEN,"mRNA_baseDecay\t");
+	mD += snprintf(mD,DEGREESTRINGBUFLEN,"mRNA_maxDecay\t");
+	ARRAY_TYPE_FOREACH(messIt){
+		calcMaxEffect(messIt.curr->producer,&maxProdVal,&baseProdVal,&maxDecayVal,&baseDecayVal);
+		bP += sprintf(bP,"%f\t",baseProdVal);
+		mP += sprintf(mP,"%f\t",maxProdVal);
+		bD += sprintf(bD,"%f\t",baseDecayVal);
+		mD += sprintf(mD,"%f\t",maxDecayVal);
+	}
+	*bP = *mP = *bD = *mD ='\0';
+	fprintf(degreesOut,"%s\n",baseProds);
+	fprintf(degreesOut,"%s\n",maxProds);
+	fprintf(degreesOut,"%s\n",baseDecays);
+	fprintf(degreesOut,"%s\n",maxDecays);
+	pmbPtrArray genes = generateDNAPtrArray(g);
+	pmbPtrArrayIters dnaIt = getpmbPtrArrayIters(&genes);
+	memset(baseProds,0,DEGREESTRINGBUFLEN);
+	memset(maxProds,0,DEGREESTRINGBUFLEN);
+	bP = baseProds;
+	mP = maxProds;
+	// fprintf(degreesOut,"dna_targ\t");
+	// ARRAY_TYPE_FOREACH(dnaIt){
+	// 	if(dnaIt.curr->producer->produces.species == MESSENGER){
+	// 		fprintf(degreesOut,"%s\t",dnaIt.curr->producer->produces.producer->name);
+	// 	}else{
+	// 		fprintf(degreesOut,"%s\t",dnaIt.curr->producer->produces.modulator->name);
+	// 	}
+	// }
+	// fputc('\n', degreesOut);
+	bP += sprintf(bP,"DNA_baseProduction\t");
+	mP += sprintf(mP,"DNA_maxProduction\t");
+	ARRAY_TYPE_FOREACH(dnaIt){
+		calcMaxEffect(dnaIt.curr->producer,&maxProdVal,&baseProdVal,NULL,NULL);
+		bP += sprintf(bP,"%f\t",baseProdVal);
+		mP += sprintf(mP,"%f\t",maxProdVal);
+	}
+	fprintf(degreesOut,"%s\n",baseProds);
+	fprintf(degreesOut,"%s\n",maxProds);
+	pmbPtrArray_free(&genes);
 	pmbPtrArray_free(&messes);
-	fclose(degreesOut);
+	if(!degOut)
+		fclose(degreesOut);
 }
-
 struct miniStat fileWriter_init_interval(const char * suffix,species_t species); 
-struct miniStat fileWriter_init_unif_time(const char * suffix,const char * outDir, species_t species);
+struct miniStat fileWriter_init_unif_time(const char * suffix,species_t species);
 
 
 
@@ -100,8 +155,10 @@ void setEventCountInterval(unsigned i){
 }
 
 void closeFiles() {
+	//fileWriter_close(&stRNA);
 	fileWriter_close(&stProt);
 	fileWriter_close(&stRNA);
+
 }
 
 
@@ -114,7 +171,7 @@ void closeFiles() {
 			if(gI.mIt.curr->species & (PROTEIN))
 				fprintf(stProt.fh,"\t%s",gI.mIt.curr->name);
 		}
-        fprintf(stProt.fh,"\ttotal_mess_txc\ttotal_micro_txc\ttotal_txl\n");
+		fputc('\n', stProt.fh);
  }
 
 
@@ -124,8 +181,8 @@ void closeFiles() {
 		assert(it.start->species & MODULATOR_SPECIES);
 			ARRAY_TYPE_FOREACH(it)
 				fprintf(st->fh,"\t"ltf_rp,it.curr->modulator->qty);
-			fprintf(st->fh,"\t"ltf_rp"\t"ltf_rp"\t"ltf_rp"\n",totalSynths.nMessTranscription,
-            totalSynths.nMicroTranscription,totalSynths.nTranslation);
+    fputc('\n',st->fh);
+			//fprintf(st->fh,"\t"ltf_rp"\t"ltf_rp"\t"ltf_rp"\n",totalSynths.nMessTranscription,totalSynths.nMicroTranscription,totalSynths.nTranslation);
 
 }
 
@@ -170,11 +227,12 @@ void closeFiles() {
 
 
 
+#ifdef UNIFORM_TIME
 	 void logData(int k){
 		printReactantQtysUnifTime();
 	}
 
-
+	 void setInterval(ulong_type interval){}
 	 void printReactantQtysUnifTime(){
 	if((clockTime-stProt.lastTime) > stProt.sampling_interval){
 	
@@ -182,7 +240,49 @@ void closeFiles() {
 		stProt.lastTime=clockTime;
 	}
 	}
+#elif defined(COMMONEVENTSONLY)
+	 void logData(int k){
+		printReactantQtysCommonEvents();
+	}
+	 void setInterval(ulong_type interval){
+		stProt.event_interval = interval;
+		stRNA.event_interval = interval;
+	}
+#elif defined(ALLEVENTS)
+	 void logData(int k){
+		printReactantQtysByInterval(k);
+	}
+	 void setInterval(ulong_type interval){
+		stProt.event_interval = interval;
+		stRNA.event_interval = interval;
+	}
+#else
+	#error "Must define UNIFORM_TIME,COMMONEVENTSONLY, or ALLEVENTS"
+#endif
 
+
+void copyConfigfile(const char * srcPath, const char * destPath){
+    char srcF[1000];
+    char destF[1000];
+    sprintf(srcF,"config.xml");
+    sprintf(destF,"%s/config.xml",destPath);
+    FILE * src, * targ;
+    src = fopen(srcF,"r");
+    if(!src){
+        fprintf(stderr,"cannot open src %s config file\n",srcF);
+        exit(12245);
+    }
+    targ=fopen(destF,"w");
+    if(!targ){
+        fprintf(stderr,"cannot open targ %s config file\n",destF);
+        exit(12245);
+    }
+    char ch;
+    while((ch = fgetc(src))!= EOF)
+        fputc(ch,targ);
+    fclose(src);
+    fclose(targ);
+}
 
 void mkdir_if_not_exists(const char * dirName) {
 	struct stat st = {0};
@@ -190,6 +290,30 @@ void mkdir_if_not_exists(const char * dirName) {
 		mkdir(dirName, S_IRWXU | S_IRWXG | S_IRWXO | S_IWOTH | S_IROTH);
 }
 
+const char * networkParmPath(){
+	static char networkPathBuf[1000]= "\0";
+	if(!strlen(networkPathBuf)){
+		sprintf(networkPathBuf,"output/net.md.%s",networkParamHash(0));
+		mkdir_if_not_exists(networkPathBuf);}
+	return networkPathBuf;
+}
+
+const char * specificNetworkPath(){
+	static char specificPathBuf[1000]="\0";
+	if(!strlen(specificPathBuf)){
+		sprintf(specificPathBuf, "%s/ngs.%d",networkParmPath(),networkGenSeed);
+		mkdir_if_not_exists(specificPathBuf);}
+	return specificPathBuf;
+}
+
+const char * networkPathWNActiveMiRs(unsigned nActiveMirs){
+	static char networkPathWNActiveMiRsBuf[1000]="\0";
+	if (!strlen(networkPathWNActiveMiRsBuf)){
+		sprintf(networkPathWNActiveMiRsBuf, "%s/nMiRs.%zd",specificNetworkPath(),nActiveMirs);
+		mkdir_if_not_exists(networkPathWNActiveMiRsBuf);}
+	return networkPathWNActiveMiRsBuf;
+}
+static char jsonfilepth[1000];
 
 static void split_file_from_path(char * fnamestring, char ** dirname, char ** fname){
     static char localdirname[MAX_JSON_FILENAME];
@@ -206,53 +330,59 @@ static void split_file_from_path(char * fnamestring, char ** dirname, char ** fn
     *fname = localfilename;
 }
 
-//NOT USED FOR MAIN PAPER - ONLY FOR DEMO
-
-char * writeGenesList(GenesList * g,SkipDisabled skipDisabled, const char * dest) {
+char * writeGenesList(GenesList * g,SkipDisabled skipDisabled,char * root,unsigned nActive,char * miRsStates) {
 	static char jsonfile[1000];
-    snprintf(jsonfile,1000,"%s",dest);
+	int written;
+	if(skipDisabled == SKIP_DISABLED){
+		written = snprintf(jsonfilepth, 1000, "%s/miRs.%d",root,nActive);
+		mkdir_if_not_exists(jsonfilepth);
+		written += snprintf(jsonfilepth+written,1000,"/states.%s",miRsStates);
+		mkdir_if_not_exists(jsonfilepth);
 
+		snprintf(jsonfile,1000,"%s/genes.json",jsonfilepth);
+
+           
+	} else {
+		snprintf(jsonfile,1000,"%s/genes.json",specificNetworkPath());
+		
+	}
+    copyConfigfile(".",specificNetworkPath());
 	writeGenesList_JSON(g, jsonfile,skipDisabled);
 	return jsonfile;
 }
 
-char  * writeTempGenesList(GenesList * g, const char * infile,const char * destdir){
-    static char tmpoutfilename[1000];
-    char * inputDir, *inputFilename;
-    split_file_from_path(infile,&inputDir,&inputFilename);
-    snprintf(tmpoutfilename,MAX_JSON_FILENAME,"%s/%s",destdir,inputFilename);
-    mkdir_if_not_exists(destdir);
-    writeGenesList_JSON(g,tmpoutfilename,SKIP_DISABLED);
-    return tmpoutfilename;
-}
-
-
 GenesList * readGenesList(const char * filename){
-	return readGenesList_JSON(filename);
+    static char readGenesListBuf[1000];
+    char * fname, * dname;
+    
+    //split_file_from_path(filename,&dname,&fname);
+    if(!strstr(filename,".json")){
+        snprintf(readGenesListBuf,1000,"%s/genes.json",filename);
+    }else{
+        snprintf(readGenesListBuf,1000,"%s",filename);
+    }
+	return readGenesList_JSON(readGenesListBuf);
 }
 
-char * outputFileString(struct miniStat * st,const char * outdir) {
-    int status;
-	status = snprintf(st->dirName,MAX_JSON_FILENAME,"%s",outdir);
-	if(status < 0){
-        fprintf(stderr,"Failure in func snprintf at %s:%d\n",__FILE__,__LINE__);
-    }
-	status = snprintf(st->fileName,MAX_JSON_FILENAME,"%s/sim.%d.%s.txt",st->dirName,simulationSeed,st->suffix);
-	if(status < 0){
-        fprintf(stderr,"Failure in func snprintf at %s:%d\n",__FILE__,__LINE__);
-    }
-    status = snprintf(st->degreeFileName,MAX_JSON_FILENAME,"%s/sim.%d.%s.degrees.txt",
+char * outputFileString(struct miniStat * st) {
+
+	sprintf(st->dirName,"%s",jsonfilepth);
+	
+	sprintf(st->fileName,"%s/sim.%d.%s.txt",st->dirName,simulationSeed,st->suffix);
+	sprintf(st->degreeFileName,"%s/sim.%d.%s.degrees.txt",
 		st->dirName,simulationSeed,st->suffix);
-	if(status < 0){
-        fprintf(stderr,"Failure in func snprintf at %s:%d\n",__FILE__,__LINE__);
-    }
-    return st->fileName;
+	return st->fileName;
 }
+
+
+
+
+
 
 // create JSON output filename string
 char * JSONOutputFileString(struct miniStat *st,UnsignedCharArray miRs_active){
 	static char strOut[1000];
-	snprintf(strOut,1000,"%s/sim.%d.mirs.%d.json",st->dirName,simulationSeed,UnsignedCharArray_total(miRs_active));
+	sprintf(strOut,"%s/sim.%d.mirs.%d.json",st->dirName,simulationSeed,UnsignedCharArray_total(miRs_active));
 	return strOut;
 }
 
@@ -310,22 +440,23 @@ struct miniStat fileWriter_init_by_unif_time(const char * suffix,species_t speci
 	strncpy(toRet.suffix, suffix, strlen(suffix));
 	return toRet;
 }
-struct miniStat fileWriter_init_unif_time(const char * suffix,const char * outDir, species_t species) {
+struct miniStat fileWriter_init_unif_time(const char * suffix,species_t species) {
 	struct miniStat toRet = fileWriter_init_by_unif_time(suffix, species);
-	outputFileString(&toRet,outDir);
+	outputFileString(&toRet);
 	mkdir_if_not_exists(toRet.dirName);
 	fileWriter_open_(&toRet);
 	return toRet;
 }
 
 
-void openFilesForWriting(GenesList *g,const char * destDir,char * optSuffix) {
-    mkdir_if_not_exists(destDir);
-	stRNA = fileWriter_init_unif_time("rna",destDir,MESSENGER);
-	stProt = fileWriter_init_unif_time(optSuffix ? optSuffix : "prot",destDir,PROTEIN);
+
+
+void openFilesForWriting(GenesList *g,char * optSuffix) {
+	stRNA = fileWriter_init_unif_time("rna",MESSENGER);
+	stProt = fileWriter_init_unif_time(optSuffix ? optSuffix : "prot",PROTEIN);
 	stRNA.data = generateMessengerPtrArray(g);
 	stProt.data = generateProteinPtrArray(g);
-	printDegrees(g);
+	printDegrees(NULL,g);
 }
 
 

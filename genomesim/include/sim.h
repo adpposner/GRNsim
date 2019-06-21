@@ -1,35 +1,15 @@
-//sim.h - Primary structure for simulation options
-/*
-    
-    Copyright (C) 2018, Russell Posner
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-*/
 #ifndef __SIM_H_RP__
 #define __SIM_H_RP__
-
-
+#include "globals.h"
 #include "sim/simulator.h"
 #include "sim/event.h"
 #include "sim/reactionrates.h"
 #include "models.h"
-#include "globals.h"
-
 
 
 enum networkGeneration {USE_FILE,RANDOM_GENERATE};
 
-#ifndef MAX_JSON_FILENAME
-#define MAX_JSON_FILENAME 500
-#endif
+
 
 typedef struct SimulationComponents {
 	minHeap *mH;
@@ -48,6 +28,7 @@ typedef struct SimOpts {
 	int nSimulations;
 	unsigned nConformations;
 } SimOpts;
+
 
 
 #endif

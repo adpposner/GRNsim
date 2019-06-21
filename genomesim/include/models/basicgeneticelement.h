@@ -1,18 +1,3 @@
-//basicgeneticelement.h - Structure and typedef for genetic elements (producers, modulators, bound)
-/*
-    
-    Copyright (C) 2018, Russell Posner
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-*/
 #ifndef BASIC_GENETIC_ELEMENT_H__
 #define BASIC_GENETIC_ELEMENT_H__
 #include "../globals.h"
@@ -66,7 +51,8 @@ typedef struct BoundElement {
 	struct ModulatorElement * right;
 	rate_t_rp assocConstant;
 	rate_t_rp dissocConstant;
-	effect_t_rp effectStrength;
+	effect_t_rp prodEffectStrength;
+	effect_t_rp decayEffectStrength;
 	struct Reaction * unbinding;
 	//relative index in array owned by the producer
 	//That is, relativePos = i such that (p.boundElts[i]==this)
@@ -122,5 +108,5 @@ void initBoundElementPtrsForModulator(Modulator *m,const BoundElementArray *bd);
 ulong_type getIndegree_dna(const Producer *p);
 ulong_type getIndegree_mess(const Producer *mess);
 
-
+void calcMaxEffect(Producer * p,numeric_t_rp * maxProdEffect, numeric_t_rp * baseProdEffect, numeric_t_rp * maxDecayEffect,numeric_t_rp * baseDecayEffect);
 #endif

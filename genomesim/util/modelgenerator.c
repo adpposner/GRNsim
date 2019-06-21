@@ -1,18 +1,3 @@
-// modelgenerator.c -Source for generation of random networks from parms/config.xml
-/*
-    
-    Copyright (C) 2018, Russell Posner
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-*/
 #include "../include/modelgenerator.h"
 #include "../include/globals.h"
 #include "../include/randomnumbers.h"
@@ -30,17 +15,26 @@
 
 
 
+
+
+//want to package below so the indegree/outdegree things aren't split
+static unsigned extendBoundElementArray(){return 0;}
+
+
+
+
+
 static ulong_type createRandomConnections_(GenesList *g, species_t left, species_t right) {
-	//currently ignores the "noncoding" part and treats all DNA equally
-	if(left & DNA) {assert(right & PROTEIN); left = DNA;}
+	if(left & DNA) assert(right & PROTEIN);
 	if(left & MESSENGER) assert(right & MICRO);
 	pmbPtrArray leftPtrArr;
 	pmbPtrArray rightPtrArr;
 	leftPtrArr = getPtrArrayForType(g, left);
 	rightPtrArr = getPtrArrayForType(g, right);
-	randomnumbers_init(networkGenSeed);
+
 
 	UnsignedIntArray nConns;
+	int by_indegree=0;
 	//Get the indegrees for each element - !!Using indegrees
 
 	nConns = getRandomConnectionNumbersForElements(leftPtrArr.length,rightPtrArr.length, left,right);
@@ -48,10 +42,10 @@ static ulong_type createRandomConnections_(GenesList *g, species_t left, species
 	unsigned totalConns;
 	//Sum up to find out how far we have to extend our arrays
 	totalConns = UnsignedIntArray_total(nConns);
-	//need to check if just adding more boundelements?
+	//are we just adding more boundelements?
 	ulong_type oldLength = g->bounds.length;
 	BoundElementArray_extend(&g->bounds, totalConns);
-	//If we've already done our first set of connections (i.e. if we are now doing miRs vs. TFs)
+	//If we've already done our first set of connections (i.e. if we are now doing miRs vs. )
 	BoundElementArrayIters bIt = getBoundElementArrayIters(&g->bounds);
 	bIt.curr = bIt.start + oldLength;
 	
@@ -110,26 +104,30 @@ static void randomlyConnectGeneslist(GenesList *g) {
 	unsigned nMessMir = 0, nTFDNA = 0;
 	nMessMir = createRandomConnections_(g,MESSENGER,MICRO);
 	nTFDNA = createRandomConnections_(g,CODING, PROTEIN);
+	nTFDNA += createRandomConnections_(g,NONCODING,PROTEIN);
 	genesList_bound_quantities_init(g, nMessMir, nTFDNA);
 	assert((g->nMessMir + g->nTFDNA) == g->bounds.length);
 	assignBoundElements(g);
 }
 
 GenesList * setupRandomGenesList(){
-	initializeParameters(".");
+
 	GenesList *toRet = genesList_base_generate(globalDims.nMess,globalDims.nMicro);
 	randomlyConnectGeneslist(toRet);
 	return toRet;
 }
 
 
-void createNetwork(SimulationComponents *sim,const char * dest){
+void createNetwork(SimulationComponents *sim){
+    	initializeParameters(".");
+		randomnumbers_init(networkGenSeed);
 		sim->g = setupRandomGenesList();
 		initDefaultGenesListQuantities(sim->g);
-		writeGenesList(sim->g,INCLUDE_DISABLED,dest);
+		writeGenesList(sim->g,INCLUDE_DISABLED,NULL,0,NULL);
 }
 
 void destroyNetwork(SimulationComponents *toFree) {
+    destroyParameters();
 	minHeap_free(toFree->mH);
 	if(toFree->rxns)
 		ReactionArray_free(toFree->rxns);

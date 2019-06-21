@@ -1,18 +1,3 @@
-// globals.c - source for defs of global/debug functions and variables
-/*
-    
-    Copyright (C) 2018, Russell Posner
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-*/
 #include "../include/globals.h"
 #include <stdlib.h>
 #include <string.h>
@@ -52,7 +37,8 @@ int networkGenSeed = -1;
 time_t_rp clockTime=0.0;
 
 void resetTime(){clockTime=0.0;commonBirthDeaths=0;
-	totalSynths.nMessTranscription = totalSynths.nMicroTranscription =totalSynths.nTranslation = 0;}
+	memset(&totalSynths,0,sizeof(totalSynths));
+	}
 
 void * mallocDB(size_t sz,const char * caller)	{
 mallocDBGCt++;return malloc(sz);}

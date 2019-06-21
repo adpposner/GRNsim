@@ -1,19 +1,3 @@
-//basicgeneticelement_p.h - "Private" structures/functions for basicgeneticelement
-/*
-    
-    Copyright (C) 2018, Russell Posner
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-*/
-
 #ifndef BASIC_GENETIC_ELEMENT_P_H__
 #define BASIC_GENETIC_ELEMENT_P_H__
 #include "basicgeneticelement.h"
@@ -23,21 +7,33 @@
 
 
 
-#define OCC_VEC_PRODUCER_EXISTS_FLAG	1<<0
-#define OCC_VEC_ELEM_FLAG(x)	1<<x
+// #define OCC_VEC_PRODUCER_EXISTS_FLAG	1<<0
+// #define OCC_VEC_ELEM_FLAG(x)	1<<x
 
 
 typedef struct BitsAndMod {
-	occ_bits_rp bits;
-	rate_t_rp modifier;
+	occ_bits_rp_t bits;
+	rate_t_rp prodMod;
+	rate_t_rp decayMod;
 } BitsAndMod;
 
 typedef struct OccupancyVector {
 	BitsAndMod *data;
+	rate_t_rp prodSum;
+	rate_t_rp decaySum;
 	ulong_type len;
 } OccupancyVector;
 
 OccupancyVector emptyOccupancyVector();
+
+// typedef struct OccupancyVectorIters {
+// 	occ_bits_rp * const occStart,* const occEnd;
+// 	rate_t_rp * const modStart,* const modEnd;
+// 	occ_bits_rp * occCurr;
+// 	rate_t_rp *modCurr;
+// } OccupancyVectorIters;
+
+
 
 
 struct ProducerElement {
@@ -57,6 +53,8 @@ struct ModulatorElement {
 	ElementInfo
 	rate_t_rp decayConstant;
 	BoundElementPtrArray boundelts;
+	effect_t_rp productionEffect;
+	effect_t_rp decayEffect;
 	Reaction * selfDecay;
 	ReactionPtrArray bindings;
 };

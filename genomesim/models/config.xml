@@ -1,0 +1,56 @@
+<configuration>
+
+	<system>
+		<miRNAs_active>0</miRNAs_active>
+	</system>
+
+	<globalDimensions>
+		<nMess>50</nMess>
+		<nMicro>15</nMicro>
+	</globalDimensions>
+
+	<connectionParameters>
+		<miRNAs>
+			<degree_low>2</degree_low>
+			<degree_high>50</degree_high>
+			<effectProb>0.4</effectProb>
+		</miRNAs>
+		
+		<TFs>
+			<degree_low>2</degree_low>
+			<degree_high>14</degree_high>
+			<effectProb>0.3</effectProb>
+		</TFs>
+
+	</connectionParameters>
+
+
+	<randomSeeds>
+		<networkGenSeed>99205</networkGenSeed>
+    <simulationSeed>868279</simulationSeed>
+	</randomSeeds>
+
+	<baseRates>
+		<rnaProd>2.0</rnaProd>
+		<rnaDecay>0.5</rnaDecay>
+		<proteinProd>1.0</proteinProd>
+		<proteinDecay>0.04</proteinDecay>
+		<TFaffinity>0.04</TFaffinity>
+		<TFeffectMin>1.2</TFeffectMin>
+		<TFeffectMax>2.5</TFeffectMax>
+		<miRProd>6.0</miRProd>
+		<miRaffinity>0.1</miRaffinity>
+		<miReffectStrength>1.22</miReffectStrength>
+		
+		<defaultRate>1.0</defaultRate>
+	</baseRates>
+	
+	<prices>
+		<proteinCost>1.0</proteinCost>
+		<mRNACost>1.0</mRNACost>
+		<miRNACost>1.0</miRNACost>
+	</prices>
+
+
+
+</configuration>

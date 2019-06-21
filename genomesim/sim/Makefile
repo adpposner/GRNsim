@@ -1,5 +1,5 @@
-BUILDDIR = ../build/sim
-
+CC = icc
+BUILDDIR = $(patsubst %,%/sim,$(BUILDDIR_BASE))
 
 
 LOCALCFLAGS = 
@@ -13,11 +13,15 @@ SRCS_FILES = $(patsubst %,%.c,$(SRCS_NAMES))
 OBJS_FILES = $(patsubst %,$(BUILDDIR)/%.o,$(SRCS_NAMES))
 
 
-all: $(OBJS_FILES)
-	
+all: makedirec $(OBJS_FILES)
 
-$(BUILDDIR)/%.o: %.c
+
+makedirec:
+	$(MKDIR_P) $(BUILDDIR)
+
+$(BUILDDIR)/%.o: %.c 
 	$(CC) $(CFLAGS) -c $^ -o $@ $(NEWLFLAGS)
+
 
 
 debug: $(OBJS_FILES)
@@ -26,19 +30,22 @@ verbose: CFLAGS += -DDEBUG
 verbose: debug
 
 opt:
-	$(CC) -O3 -xHost $(CFLAGS) -o $(TARGET) main.c $(SRCS_FILES) $(NEWLFLAGS)
+	icc -O3 -xHost $(CFLAGS) -o $(TARGET) main.c $(SRCS_FILES) $(NEWLFLAGS)
 
 testJSON:
-	$(CC) -g -O0 -DTESTREACTANTREF $(CFLAGS) -o $(TARGET) geneslistTests.c $(SRCS_FILES) $(NEWLFLAGS)
+	icc -g -O0 -DTESTREACTANTREF $(CFLAGS) -o $(TARGET) geneslistTests.c $(SRCS_FILES) $(NEWLFLAGS)
 
 testRxns:	
-	$(CC) -g -O0 -DTESTREACTIONGENERATION $(CFLAGS) -o $(TARGET) geneslistTests.c $(SRCS_FILES) $(NEWLFLAGS) 
+	icc -g -O0 -DTESTREACTIONGENERATION $(CFLAGS) -o $(TARGET) geneslistTests.c $(SRCS_FILES) $(NEWLFLAGS) 
 
 testConnections:
-	$(CC) -g -O0 -DTESTPTRCONVERSION $(CFLAGS) -o $(TARGET) geneslistTests.c $(SRCS_FILES) $(NEWLFLAGS)
+	icc -g -O0 -DTESTPTRCONVERSION $(CFLAGS) -o $(TARGET) geneslistTests.c $(SRCS_FILES) $(NEWLFLAGS)
 
 testInit:
-	$(CC) -g -O0 -DTESTASSERTIONS -DCONVERSIONANDINIT $(CFLAGS) -o $(TARGET) geneslistTests.c $(SRCS_FILES) $(NEWLFLAGS)
+	icc -g -O0 -DTESTASSERTIONS -DCONVERSIONANDINIT $(CFLAGS) -o $(TARGET) geneslistTests.c $(SRCS_FILES) $(NEWLFLAGS)
 
 clean:
-	rm ../build/sim/*.o
+	rm $(wildcard $(BUILDDIR)/*.o)
+
+cleanexponentchange:
+	rm ../build/sim/reactionrates.o

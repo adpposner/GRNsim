@@ -1,28 +1,7 @@
-//iofuncs.h - header for file I/O for both netgen and sim
-/*
-    
-    Copyright (C) 2018, Russell Posner
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-*/
 #ifndef IOFUNCS_H_RP__
 #define IOFUNCS_H_RP__
 #include "../models/geneslist.h"
 #include "../parameters.h"
-#include "../globals.h"
-
-
-#ifndef MAX_JSON_FILENAME
-#define MAX_JSON_FILENAME 500
-#endif
 
 
 #define CPU_TIMEIT_START	clock_t begin; begin=clock();
@@ -45,10 +24,10 @@ void name##Array_print(struct miniStat *st,name##Array arr); \
 
 struct miniStat {
 	FILE * fh;
-	char dirName[MAX_JSON_FILENAME];
-	char fileName[MAX_JSON_FILENAME];
-	char suffix[MAX_JSON_FILENAME];
-	char degreeFileName[MAX_JSON_FILENAME];
+	char dirName[256];
+	char fileName[256];
+	char suffix[56];
+	char degreeFileName[256];
 	union {
 		ulong_type event_interval;
 		time_t_rp sampling_interval;
@@ -61,11 +40,11 @@ struct miniStat {
 extern struct miniStat stRNA, stProt;
 
 
-void openFilesForWriting(GenesList *g,const char * destDir,char * optSuffix);
-
+void openFilesForWriting(GenesList *g,char * optSuffix);
+void setInterval(ulong_type i);
 void closeFiles();
 
-
+// void printReactantQtys( struct miniStat *st,int idx);
  void printReactantQtysProtEvents( struct miniStat *st);
  void writeReactantQtys(struct miniStat *st,int idx, GenesList g);
  void printReactantQtysByInterval(int idx);
@@ -82,12 +61,9 @@ struct miniStat fileWriter_init(const char * suffix, const ulong_type loggingInt
 void fileWriter_close(struct miniStat *st);
 
 void printHeaders(GenesList *g);
-
-
-
-char * writeGenesList(GenesList * g,SkipDisabled skipDisabled,const char * dest);
-char  * writeTempGenesList(GenesList * g, const char * infile,const char * destdir);
-
+void printDegrees(FILE * degOut, GenesList *g);
+char * writeGenesList(GenesList * g,SkipDisabled skipDisabled,char * root,unsigned nActive,char * miRsStates);
+//void writeGraph(connectedGenesList * cg);
 
 GenesList * readGenesList(const char * filename);
 

@@ -1,31 +1,20 @@
-//globals.h - General macros, constants, functions and global vars
-/*
-    
-    Copyright (C) 2018, Russell Posner
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-*/
 #ifndef GLOBALS_RP_H__
 #define GLOBALS_RP_H__
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <stdint.h>
-
+#include <xmmintrin.h>
+#include "precision.h"
 
 #define MAXGENENAMELENGTH	25
-#define ulong_type	unsigned long
-#define ltf_rp	"%zu"
-#define ulong_type_max	UINT64_MAX
-static const unsigned MAX_JSON_FILENAME = 500;
+#define ulong_type	int
+#define ltf_rp	"%d"
+#define ulong_type_max	INT32_MAX
+#define qty_type    int
+#define MAX_JSON_FILENAME  500
+
+#define DROPCONST(tp,elem)   *(tp *)&elem
 
 #define DECLAREBASICARRAYTYPESTRUCT(tp,tpname)	typedef struct tp ## Array {	\
 	struct tp * data;														\
@@ -79,7 +68,7 @@ tpname ## Array empty ## tpname ## Array(){ 											\
 	return (tpname ## Array){.data = NULL,.length=0};}					\
 tpname ## Array tpname ## Array_alloc(ulong_type length) {				\
 	tpname ## Array toRet;												\
-	toRet.data = mallocDBG(length * sizeof(*toRet.data));			\
+	toRet.data = my_malloc(length * sizeof(*toRet.data));			\
 	memset(toRet.data,0,length*sizeof(*toRet.data));				\
 	toRet.length = length; return toRet;}							\
 	tpname ## ArrayIters get ## tpname ## ArrayIters(const tpname ## Array * arr){	\
@@ -93,7 +82,7 @@ void tpname ## Array_free(tpname ## Array * tofree) {						\
 	if(it.start){														\
 		for(it.curr=it.start;it.curr!=it.end;it.curr++)					\
 	 tpname ## _free(it.curr);											\
-	freeDBG(tofree->data);											\
+	my_free(tofree->data);											\
 	tofree->data = NULL;}											\
 	tofree->length = 0;	}											\
 void tpname ## Array_extend(tpname ## Array * toRealloc, ulong_type additionalLength){	\
@@ -159,48 +148,43 @@ printf("%s: %d ms\n",#func,msec);}while(0);							\
 
 //////////////////////
 
-//TESTING BIMODAL CONNECTIONS THIS IS REALLY HACKY
-#ifndef BIMODAL_MIRNA_RP
-#define BIMODAL_MIRNA_RP	0
-#define BIMODAL_P2_RP	0
-#define BIMODAL_SELECT_RP	1.0
-#else
-#define BIMODAL_P2_RP	0.1
-#define BIMODAL_SELECT_RP	0.2
-#endif
+
 
 ////////////////////
 
+#ifndef TXC_K_ONE_HALF
+#define TXC_K_ONE_HALF  6
+#endif
+#ifndef TXC_PROD_EXPONENT
+#define TXC_PROD_EXPONENT  1
+#endif
+
+#ifndef TXL_K_ONE_HALF
+#define TXL_K_ONE_HALF  5
+#endif
+#ifndef TXL_PROD_EXPONENT
+#define TXL_PROD_EXPONENT  1
+#endif
+
+#ifndef MESS_DECAY_K_ONE_HALF
+#define MESS_DECAY_K_ONE_HALF  5
+#endif
+#ifndef MESS_DECAY_EXPONENT
+#define MESS_DECAY_EXPONENT  1
+#endif
+
 
 enum ConnDegreeTp {INDEGREE = 0, OUTDEGREE = 1};
-//This is important - there are hard maxes here 
-//Max # of modulators is 63 (using 64 bit units to represent occupancy), can be changed by
-//changing type of bitsandmod in basicgeneticelement_p.h
 
-#define MAX_NCONNECTIONS	63
-typedef uint64_t occ_bits_rp;
-//default quantities of DNA when not otherwise specified
-#define CODING_QTY	2
-#define NONCODING_QTY	8
-//Also important - specifies max # of mRNA molecules per gene
-//Can make this bigger or smaller freely - system will check to make sure this number isn't
-//exceeded and will error
+#define MAX_NCONNECTIONS	255
+typedef struct occ_bits_rp_t {uint64_t x[4];} occ_bits_rp_t;
+
+#define CODING_QTY	2   //Note these are forced
+#define NONCODING_QTY	4
 #define MAX_MRNA_QTY	1000
 
-//Precision definitions
-#ifdef DOUBLE_PRECISION_RP
-typedef double numeric_t_rp;
-typedef double rate_t_rp;
-typedef double time_t_rp;
-typedef double effect_t_rp;
-#define MEPS_RP	DBL_EPSILON
-#else
-typedef float numeric_t_rp;
-typedef float rate_t_rp;
-typedef float time_t_rp;
-typedef float effect_t_rp;
-#define MEPS_RP	FLT_EPSILON
-#endif
+
+
 
 #define INITLOGGINGINTERVAL	100
 #define DEFAULTLOGGINGINTERVAL	1000
@@ -218,18 +202,16 @@ extern int miRNAs_active;
 extern ulong_type n_cycles;
 
 
-extern ulong_type totalProductions;
-extern ulong_type totalDecays;
-extern ulong_type totalBindings;
-extern ulong_type totalUnbindings;
-extern ulong_type totalForcedUnbindings;
-extern ulong_type totalForcedDecays;
 
-//debug versions of mem funcs
-#define mallocDBG(x)	mallocDB(x,__func__)
-#define freeDBG(x)	freeDB(x,__func__)
+#ifdef DEBUG
+#define my_malloc(x)	mallocDB(x,__func__)
+#define my_free(x)	freeDB(x,__func__)
 void * mallocDB(size_t sz,const char * caller);
 void freeDB(void * toFree,const char * caller);
+#else
+#define my_malloc(x)    _mm_malloc(x,64)
+#define my_free(x)      _mm_free(x)
+#endif
 
 typedef enum species_enum {UNDEFINED=0,NOSPECIES=0,CODING=1,NONCODING=2,DNA=3,MESSENGER=4,PRODUCER_SPECIES=7,
 	MICRO=8,PROTEIN=16,MODULATOR_SPECIES = 24,MESSMIR=32,TFDNA=64,BOUND_SPECIES = 96} species_t;
@@ -277,7 +259,18 @@ extern long commonBirthDeaths;
 extern long commonBirthDeathsLast;
 
 typedef struct synthTotals {
-	ulong_type nMessTranscription;
+	ulong_type totalCodingTranscription;
+	ulong_type totalNonCodingTranscription;
+	ulong_type totalTranslations;
+	ulong_type totalMessDecays;
+	ulong_type totalForcedMirDecays;
+	ulong_type totalForcedMirUnbindings;
+	ulong_type totalModDecays;
+	ulong_type totalMessMirBindings;
+	ulong_type totalTFDNABindings;
+	ulong_type totalMessMirUnBindings;
+	ulong_type totalTFDNAUnBindings;
+    	ulong_type nMessTranscription;
 	ulong_type nMicroTranscription;
 	ulong_type nTranslation;
 } synthTotals;

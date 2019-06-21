@@ -1,19 +1,3 @@
-// basicgeneticelement.c - Functions for producer, modulator, bound 
-//data structures
-/*
-    
-    Copyright (C) 2018, Russell Posner
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-*/
 #include "../include/globals.h"
 #include "../include/models/basicgeneticelement.h"
 #include "../include/models/basicgeneticelement_p.h"
@@ -24,7 +8,10 @@
 #include <string.h>
 #include "../include/globals.h"
 #include "../include/models/reaction.h"
+#include <math.h>
 #include <limits.h>
+
+
 
 
 char isProducer(species_t species) {
@@ -38,6 +25,9 @@ char isModulator(species_t species) {
 char isBound(species_t species) {
 	return (species & (MESSMIR | TFDNA)) ? 1 : 0;
 }
+
+
+static const occ_bits_rp_t nullElem = {.x = {1<<0,0,0,0}};
 
 char canDecay(species_t species) {
 	#ifdef BOUNDDECAY
@@ -83,7 +73,7 @@ ulong_type getElementQty(pmbPtr toGet){
 }
 #endif
 OccupancyVector emptyOccupancyVector() {
-	return (OccupancyVector) {.len = 0, .data = NULL};
+	return (OccupancyVector) {.len = 0, .data = NULL,.decaySum=0.0,.prodSum=0.0};
 }
 
 void OccupancyVector_free(OccupancyVector * toFree) {
@@ -107,9 +97,14 @@ static void initOccupancyVector(Producer *p, ulong_type initialQty, unsigned max
 	assert(initialQty <= maxVecLen);
 	p->occupancies = OccupancyVector_alloc(maxVecLen);
 	unsigned i;
+	p->occupancies.prodSum=0.0;
+	p->occupancies.decaySum=0.0;
 	for (i = 0; i < initialQty; i++) {
-		p->occupancies.data[i].bits = OCC_VEC_PRODUCER_EXISTS_FLAG;
-		p->occupancies.data[i].modifier = 1.0;
+		p->occupancies.data[i].bits = nullElem;
+		p->occupancies.data[i].prodMod = 1.0;
+		p->occupancies.data[i].decayMod = 1.0;
+		p->occupancies.prodSum++;
+		p->occupancies.decaySum++;
 	}
 }
 
@@ -265,7 +260,7 @@ Producer initMessenger(char * name, ulong_type id, Modulator * tfprotein,
 }
 
 Modulator initModulator(char *name, ulong_type id, species_t spec, rate_t_rp decayConstant,
-                        BoundElementPtrArray *conns, unsigned char enabled) {
+                        BoundElementPtrArray *conns, effect_t_rp prodEffect, effect_t_rp decayEffect, unsigned char enabled) {
 	Modulator toRet;
 	toRet.id = id;
 	toRet.species = spec;
@@ -273,6 +268,8 @@ Modulator initModulator(char *name, ulong_type id, species_t spec, rate_t_rp dec
 	toRet.name[0] = '\0';
 	if (name)
 		snprintf(toRet.name, MAXGENENAMELENGTH, "%s", name);
+	toRet.productionEffect = prodEffect;
+	toRet.decayEffect = decayEffect;
 	toRet.decayConstant = decayConstant;
 	toRet.boundelts = (conns) ? *conns : emptyBoundElementPtrArray();
 	toRet.bindings = emptyReactionPtrArray();
@@ -282,32 +279,32 @@ Modulator initModulator(char *name, ulong_type id, species_t spec, rate_t_rp dec
 
 
 Modulator initMiRNA(char * name, ulong_type id,
-                    rate_t_rp * decayConstant, BoundElementPtrArray * conns, unsigned char enabled) {
-	return initModulator(name, id, MICRO, microDecayRate(decayConstant), conns, enabled);
+                    rate_t_rp * decayConstant, effect_t_rp * prodEffect,effect_t_rp * decayEffect,
+					 BoundElementPtrArray * conns, unsigned char enabled) {
+	return initModulator(name, id, MICRO, microDecayRate(decayConstant), conns,miRProdEffectStrength(prodEffect),miRDecayEffectStrength(decayEffect),enabled);
 }
 
-Modulator initTF(char * name, ulong_type id, rate_t_rp * decayConstant,
-                 BoundElementPtrArray * conns, unsigned char enabled) {
-	return initModulator(name, id, PROTEIN, proteinDecayRate(decayConstant), conns, 1);
+Modulator initTF(char * name, ulong_type id, rate_t_rp * decayConstant, effect_t_rp * prodEffect,
+                 BoundElementPtrArray * conns,unsigned char enabled) {
+	return initModulator(name, id, PROTEIN, proteinDecayRate(decayConstant), conns,TFEffectStrength(prodEffect),0.0, enabled);
 }
 
 BoundElement initBound(char * name, ulong_type id, Producer * left, species_t spec,
-                       Modulator * right, rate_t_rp assocConst, rate_t_rp dissocConst, rate_t_rp *decayConst, effect_t_rp effectStrength) {
+                       Modulator * right, rate_t_rp assocConst, rate_t_rp dissocConst,const rate_t_rp *decayConst, 
+					   effect_t_rp prodEffectStrength,
+					   effect_t_rp decayEffectStrength) {
 	BoundElement toRet;
 	toRet.id = id;
 	toRet.species = spec;
 	toRet.qty = 0;
-    int status;
-	if (name) status = snprintf(toRet.name, MAXGENENAMELENGTH, "%s", name);
-	else status = snprintf(toRet.name, MAXGENENAMELENGTH, "%s-%s", left->name, right->name);
-    if(status < 0){
-        fprintf(stderr,"Failure in func snprintf at %s:%d\n",__FILE__,__LINE__);
-    }
+	if (name) snprintf(toRet.name, MAXGENENAMELENGTH, "%s", name);
+	else snprintf(toRet.name, MAXGENENAMELENGTH, "%s-%s", left->name, right->name);
 	toRet.left = left;
 	toRet.right = right;
 	toRet.assocConstant = assocConst;
 	toRet.dissocConstant = dissocConst;
-	toRet.effectStrength = effectStrength;
+	toRet.prodEffectStrength = prodEffectStrength;
+	toRet.decayEffectStrength = decayEffectStrength;
 	toRet.producerArrayPos = 0;
 	toRet.unbinding = NULL;
 #ifdef BOUNDDECAY
@@ -317,30 +314,38 @@ BoundElement initBound(char * name, ulong_type id, Producer * left, species_t sp
 }
 
 BoundElement initMessMir(char * name, ulong_type id, Producer * left,
-                         Modulator * right, rate_t_rp *assocConst, rate_t_rp *dissocConst, rate_t_rp *decayConst, effect_t_rp *effectStrength) {
+                         Modulator * right, rate_t_rp *assocConst, rate_t_rp *dissocConst, rate_t_rp *decayConst, 
+						 const effect_t_rp *prodEffectStrength,const effect_t_rp * decayEffectStrength) {
 	assert(left->species == MESSENGER); assert(right->species == MICRO);
-	return initBound(name, id, left, MESSMIR, right, miRAssocConst(assocConst), miRDissocConst(dissocConst), decayConst, miREffectStrength(effectStrength));
+	return initBound(name, id, left, MESSMIR, right, miRAssocConst(assocConst), miRDissocConst(dissocConst), decayConst, 
+	miRProdEffectStrength(prodEffectStrength),miRDecayEffectStrength(decayEffectStrength));
+
 }
 
 BoundElement initTFDNA(char * name, ulong_type id, Producer * left,
-                       Modulator * right, rate_t_rp *assocConst, rate_t_rp *dissocConst, rate_t_rp *decayConst, effect_t_rp *effectStrength) {
+                       Modulator * right,const rate_t_rp *assocConst,const rate_t_rp *dissocConst, 
+					   const rate_t_rp *decayConst,const effect_t_rp *effectStrength) {
 	assert(left->species & DNA); assert(right->species == PROTEIN);
-	return initBound(name, id, left, TFDNA, right, TFAssocConst(assocConst), TFDissocConst(dissocConst), decayConst, TFEffectStrength(effectStrength));
+	return initBound(name, id, left, TFDNA, right, TFAssocConst(assocConst), TFDissocConst(dissocConst), decayConst, 
+	TFEffectStrength(effectStrength),0.0);
 }
 
 static BoundElement createBasicBound(Producer * l, Modulator * r)
 {
+	BoundElement toRet;
 
 	species_t rightSpecies = r->species;
 	species_t leftSpecies = l->species;
 	if (rightSpecies & PROTEIN) {
 		assert(leftSpecies & DNA);
-		return initTFDNA(NULL, nextID(), l, r, NULL, NULL, NULL, NULL);
+		return initTFDNA(NULL, nextID(), l, r, NULL, NULL, NULL, &r->productionEffect);
 	}
 	else if (rightSpecies == MICRO) {
 		assert(leftSpecies == MESSENGER);
-		return initMessMir(NULL, nextID(), l, r, NULL, NULL, NULL, NULL);
-	} else {perror("Failure in createBasicBound"); exit(-1023);}
+		return initMessMir(NULL, nextID(), l, r, NULL, NULL, NULL, &r->productionEffect,&r->decayEffect);
+	} else {
+       fprintf(stderr,"%d\t%d",leftSpecies,rightSpecies);
+        perror("Failure in createBasicBound"); exit(-1023);}
 
 }
 
@@ -372,7 +377,8 @@ void initBasicTF(char *name, Producer * dna, Producer * mess, Modulator * tf, un
 	}
 	*dna = initCoding(geneName, nextID(), mess, NULL, NULL, enabled);
 	*mess = initMessenger(messName, nextID(), tf, NULL, NULL, NULL, enabled);
-	*tf = initTF(tfName, nextID(), NULL, NULL, enabled);
+	*tf = initTF(tfName,nextID(),NULL,NULL,NULL,enabled);
+	
 }
 
 void initBasicMicro(char *name, Producer *dna, Modulator * miR, unsigned char enabled) {
@@ -389,7 +395,7 @@ void initBasicMicro(char *name, Producer *dna, Modulator * miR, unsigned char en
 
 	}
 	*dna = initNoncoding(ncgeneName, nextID(), miR, NULL, NULL, enabled);
-	*miR = initMiRNA(miRName, nextID(), NULL, NULL, enabled);
+	*miR = initMiRNA(miRName,nextID(),NULL,NULL,NULL,NULL,enabled);
 }
 
 void Element_print(FILE * fp, pmbPtr elem) {
@@ -535,3 +541,30 @@ ulong_type getIndegree_mess(const Producer *mess) {
 //end get degrees
 
 
+void calcMaxEffect(Producer * p,numeric_t_rp * maxProdEffect, numeric_t_rp * baseProdEffect, numeric_t_rp * maxDecayEffect,numeric_t_rp * baseDecayEffect){
+	BoundElementArrayIters bIt = getBoundElementArrayIters(&p->boundelts);
+	numeric_t_rp pE,dE,bP,bD;
+	pE = dE = bP = bD = 1.0;
+	ARRAY_TYPE_FOREACH(bIt){
+		pE *= bIt.curr->prodEffectStrength;
+		dE *= bIt.curr->decayEffectStrength;
+	}
+	if(p->species & DNA){
+		pE = pow(pE,TXC_PROD_EXPONENT);
+		pE = p->productionConstant * pE / (TXC_K_ONE_HALF + pE);
+		bP = p->productionConstant * bP / (TXC_K_ONE_HALF + bP);
+		*baseProdEffect = bP * p->qty;
+		*maxProdEffect = pE * p->qty;
+	}else{
+		pE = pow(pE,TXL_PROD_EXPONENT);
+		pE = p->productionConstant * pE / (TXL_K_ONE_HALF + pE);
+		bP = p->productionConstant * bP / (TXL_K_ONE_HALF + bP);
+		dE = pow(dE,MESS_DECAY_EXPONENT);
+		dE = p->decayConstant * dE / (MESS_DECAY_K_ONE_HALF + dE);
+		bD = p->decayConstant * bD / (MESS_DECAY_K_ONE_HALF+ bD);
+		*baseProdEffect = bP;
+		*maxProdEffect = pE;
+		*maxDecayEffect = dE;
+		*baseDecayEffect = bD;
+	}
+}

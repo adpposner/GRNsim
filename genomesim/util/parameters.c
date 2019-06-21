@@ -1,25 +1,11 @@
-// parameters.c - Functions for parsing xml for network generation
-//a few utility functions are used for simulation setup, but not actually part of simulation
-/*
-    
-    Copyright (C) 2018, Russell Posner
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-*/
 #include "../include/parameters.h"
 #include "../include/parameters_p.h"
 #include <libxml/tree.h>
 #include <libxml/parser.h>
 #include <string.h>
 #include "../include/globals.h"
+#include "../include/netgen/networkdistributions.h"
+#include "../include/randomnumbers.h"
 
 #define LOCAL_XSTR(s)	LOCAL_STR(s)
 #define LOCAL_STR(s)	#s
@@ -47,6 +33,23 @@ genesDims globalDims;
 
 int networkGenSeed;
 
+//struct operatingCosts prices;
+
+/*
+Cost model parameters inserted here for now
+
+
+*/
+
+static struct ParameterStruct system_parameters = {.connParms=(connectionParameters){.miRConns = NULL, 
+.tfCodingConns = NULL,.tfNoncodingConns=NULL},
+.rates = (struct defaultRates){.micro = (struct MicroRates){.production=NULL,
+.decay=NULL,.affinity=NULL,.frequency=NULL,.prodEffectStrength=NULL,.decayEffectStrength=NULL},
+.mess=(struct MessRates){.production=NULL,.decay=NULL},.tf=(struct TFRates){.production=NULL,
+.decay=NULL,.affinity=NULL,.frequency=NULL,.effectSize=NULL},.defaultRate=NULL},
+.initialQtys = (struct initialQuantities){.coding=0,.noncoding=0,.mess=0,.micro=0,.TF=0}};
+
+
 
 static int getXMLint(xmlDocPtr doc, xmlNodePtr cur, const char * name) {
 
@@ -56,9 +59,13 @@ static int getXMLint(xmlDocPtr doc, xmlNodePtr cur, const char * name) {
 	while (cur != NULL) {
 		if ((!xmlStrcmp(cur->name, (const xmlChar* ) name))) {
 			key = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);
-
+            if(!key){
+                fprintf(stderr,"%s:%d - failed to get int value for %s\n",__FILE__,__LINE__,name);
+                exit(-8754);
+            }
+			//printf("%s\n",key);
 			toRet = strtol((const char *)key, NULL, 10);
-
+			//printf("toRet=%d\n",toRet);
 			xmlFree(key);
 			found = 1;
 		}
@@ -69,20 +76,35 @@ static int getXMLint(xmlDocPtr doc, xmlNodePtr cur, const char * name) {
 }
 
 
+numeric_t_rp getValueFromSysParam(ConstOrCtsDistribution *unit){
+	if (unit->isConst == 1){
+        return unit->rate;
+    }else if (unit->isConst == -1){
+        numeric_t_rp toRet;
+        getRandomContinuous(getStream(),1,unit->distn,&toRet);
+        return toRet;
+    }else{
+        fprintf(stderr,"isconst not set for unit\n");
+        abort();
+    }
+}
+
 static numeric_t_rp getXMLnumeric(xmlDocPtr doc, xmlNodePtr cur, const char * name) {
 
 	xmlChar *key;
-	numeric_t_rp toRet;
+	numeric_t_rp toRet=0.0;
 	int found = 0;
 	while (cur != NULL) {
 		if ((!xmlStrcmp(cur->name, (const xmlChar* ) name))) {
 			key = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);
+            if(!key){
+                fprintf(stderr,"%s:%d - failed to get int value for %s\n",__FILE__,__LINE__,name);
+                exit(-8754);
+            }
+			//printf("%s\n",key);
 
-#ifdef DOUBLE_PRECISION_RP
 			toRet = strtod((const char *)key, NULL);
-#else
-			toRet = strtof((const char *)key, NULL);
-#endif
+
 			xmlFree(key);
 			found = 1;
 		}
@@ -108,6 +130,19 @@ static unsigned char getXMLchar(xmlDocPtr doc, xmlNodePtr cur, const char * name
 	assert(found);
 	return toRet;
 }
+
+
+
+static xmlNodePtr getChildByName(xmlDocPtr doc, xmlNodePtr cur, const char * name){
+    while(cur!=NULL){
+        if(!xmlStrcmp(cur->name,(const xmlChar *)name)){
+            return cur;
+        }
+        cur=cur->next;
+    }
+    return NULL;
+}
+
 
 static void parseDims(xmlDocPtr doc, xmlNodePtr cur) {
 	globalDims.nMess = globalDims.nMicro = 0;
@@ -140,19 +175,22 @@ static void parseDims(xmlDocPtr doc, xmlNodePtr cur) {
 
 static struct ConnectionParametersUnit * parseConnectionParameterStruct(xmlDocPtr doc, xmlNodePtr cur) {
 	cur = cur->xmlChildrenNode;
-	struct ConnectionParametersUnit *toRet = malloc(sizeof(*toRet));
-
-	int founddl, founddh, foundeffP, foundByInOut;
-	founddl = founddh  = foundeffP = foundByInOut = 0;
+	struct ConnectionParametersUnit *toRet = calloc(1,sizeof(*toRet));
+    toRet->connectionDistribution = NULL;
+    if(!toRet)
+    printf("%s:%d malloc fail\n",__FILE__,__LINE__);
+	int foundDistribution, foundByInOut;
+	foundDistribution = foundByInOut = 0;
 	char tmp;
 
 	while (cur != NULL) {
-		if (!founddl)
-		{toRet->deg_low = getXMLint(doc, cur, "degree_low"); founddl = 1;} 
-		if (!founddh)
-		{toRet->deg_high = getXMLint(doc, cur, "degree_high"); founddh = 1;}
-		if (!foundeffP)
-		{toRet->effect_prob = getXMLnumeric(doc, cur, "effectProb"); foundeffP = 1;}
+		if (!foundDistribution)
+		{
+             toRet->connectionDistribution = parseXMLCompoundDiscreteDistribution(doc, cur);
+        foundDistribution = 1;
+        }
+        //printf("founddl%zu\n",toRet.deg_low);}
+		
 		if (!foundByInOut){
 					tmp = getXMLchar(doc, cur, "inOutDegree");
 					switch(tmp){
@@ -164,14 +202,39 @@ static struct ConnectionParametersUnit * parseConnectionParameterStruct(xmlDocPt
 					}foundByInOut = 1;}
 		cur = cur->next;
 	}
-	if (founddh && founddl && foundeffP && foundByInOut) {
+	if (foundDistribution && foundByInOut) {
+        
 		return toRet;
 	} else {
 		fprintf(stderr, "failure parsing connparms\n");
 		exit(-1000);
 	}
+}
 
+static ConstOrCtsDistribution *getXMLConstOrDist(xmlDocPtr doc, xmlNodePtr cur, const char * name){
+            xmlNodePtr effectNode = getChildByName(doc,cur,name);
+            
+            xmlNodePtr distNode = NULL;
+            ConstOrCtsDistribution * toRet;
+            toRet = calloc(1,sizeof(*toRet));
+            toRet->isConst = 0;
 
+            if (effectNode){
+                distNode = getChildByName(doc,effectNode->children,"continuous_distribution");
+            if(distNode){
+                //is cts distribution
+                toRet->isConst = -1;
+                toRet->distn= parseXMLCompoundContinuousDistribution(doc,distNode,name);
+                return toRet;
+            }else{
+                 toRet->rate = getXMLnumeric(doc,effectNode,name);
+                 toRet->isConst = 1;
+                 return toRet;
+                }
+            }else{
+                fprintf(stderr,"Could not find value node for %s\n",name);
+                exit(-99);
+            }
 }
 
 static void parseTFConnectionParameters(xmlDocPtr doc, xmlNodePtr cur){
@@ -220,11 +283,11 @@ static void parseMessRates(xmlDocPtr doc, xmlNodePtr cur) {
 	int found = 0;
 	while (cur != NULL) {
 		if (!(found & FOUND0)) {
-			system_parameters.rates.mess.production = getXMLnumeric(doc, cur, "production");
+			system_parameters.rates.mess.production = getXMLConstOrDist(doc, cur, "production");
 			found += FOUND0;
 		}
 		if (!(found & FOUND1)) {
-			system_parameters.rates.mess.decay = getXMLnumeric(doc, cur, "decay");
+			system_parameters.rates.mess.decay = getXMLConstOrDist(doc, cur, "decay");
 			found += FOUND1;
 		}
 		cur = cur->next;
@@ -240,28 +303,33 @@ static void parseMicroRates(xmlDocPtr doc, xmlNodePtr cur) {
 	int found = 0;
 	while (cur != NULL) {
 		if (!(found & FOUND0)) {
-			system_parameters.rates.micro.production = getXMLnumeric(doc, cur, "production");
+			system_parameters.rates.micro.production = getXMLConstOrDist(doc, cur, "production");
 			found += FOUND0;
 		}
 		if (!(found & FOUND1)) {
-			system_parameters.rates.micro.decay = getXMLnumeric(doc, cur, "decay");
+			system_parameters.rates.micro.decay = getXMLConstOrDist(doc, cur, "decay");
 			found += FOUND1;
 		}
 		if (!(found & FOUND2)) {
-			system_parameters.rates.micro.affinity = getXMLnumeric(doc, cur, "affinity");
+			system_parameters.rates.micro.affinity = getXMLConstOrDist(doc, cur, "affinity");
 			found += FOUND2;
 		}
 		if (!(found & FOUND3)) {
-			system_parameters.rates.micro.effectStrength = getXMLnumeric(doc, cur, "effectStrength");
+			system_parameters.rates.micro.prodEffectStrength = getXMLConstOrDist(doc, cur, "prodEffectStrength");
 			found += FOUND3;
 		}
 		if (!(found & FOUND4)) {
-			system_parameters.rates.micro.frequency = getXMLnumeric(doc, cur, "frequency");
+			system_parameters.rates.micro.frequency = getXMLConstOrDist(doc, cur, "frequency");
 			found += FOUND4;
 		}
-		cur = cur->next;
+
+        if (!(found & FOUND5)) {
+			system_parameters.rates.micro.decayEffectStrength = getXMLConstOrDist(doc, cur, "decayEffectStrength");
+			found += FOUND5;
+		}		
+        cur = cur->next;
 	}
-	if (found != (FOUND0 | FOUND1 | FOUND2 | FOUND3 | FOUND4)) {
+	if (found != (FOUND0 | FOUND1 | FOUND2 | FOUND3 | FOUND4 | FOUND5)) {
 		fprintf(stderr, "failure parsing microrates\n");
 		exit(-124);
 	}
@@ -272,32 +340,30 @@ static void parseTFRates(xmlDocPtr doc, xmlNodePtr cur) {
 	int found = 0;
 	while (cur != NULL) {
 		if (!(found & FOUND0)) {
-			system_parameters.rates.tf.production = getXMLnumeric(doc, cur, "production");
+            system_parameters.rates.tf.production = getXMLConstOrDist(doc,cur,"production");
+			system_parameters.rates.tf.production = getXMLConstOrDist(doc, cur, "production");
 			found += FOUND0;
 		}
 		if (!(found & FOUND1)) {
-			system_parameters.rates.tf.decay = getXMLnumeric(doc, cur, "decay");
+			system_parameters.rates.tf.decay = getXMLConstOrDist(doc, cur, "decay");
 			found += FOUND1;
 		}
 		if (!(found & FOUND2)) {
-			system_parameters.rates.tf.affinity = getXMLnumeric(doc, cur, "affinity");
+			system_parameters.rates.tf.affinity = getXMLConstOrDist(doc, cur, "affinity");
 			found += FOUND2;
 		}
-		if (!(found & FOUND3)) {
-			system_parameters.rates.tf.effectMin = getXMLnumeric(doc, cur, "effectMin");
-			found += FOUND3;
-		}
+        if (!(found & FOUND3)){
+            system_parameters.rates.tf.effectSize = getXMLConstOrDist(doc,cur,"effect");
+            found += FOUND3;
+        }
+		
 		if (!(found & FOUND4)) {
-			system_parameters.rates.tf.effectMax = getXMLnumeric(doc, cur, "effectMax");
+			system_parameters.rates.tf.frequency = getXMLConstOrDist(doc, cur, "frequency");
 			found += FOUND4;
-		}
-		if (!(found & FOUND5)) {
-			system_parameters.rates.tf.frequency = getXMLnumeric(doc, cur, "frequency");
-			found += FOUND5;
 		}
 		cur = cur->next;
 	}
-	if (found != (FOUND0 | FOUND1 | FOUND2 | FOUND3 | FOUND4 | FOUND5)) {
+	if (found != (FOUND0 | FOUND1 | FOUND2 | FOUND3 | FOUND4)) {
 		fprintf(stderr, "failure parsing tfrates\n");
 		exit(-12);
 	}
@@ -323,10 +389,16 @@ static void parseBaseRates(xmlDocPtr doc, xmlNodePtr cur) {
 				parseTFRates(doc, cur);
 				found += FOUND2;
 			}
+        if (!(found & FOUND3))
+            if (!xmlStrcmp(cur->name,(const xmlChar *) "defaultRate")){
+                system_parameters.rates.defaultRate = getXMLConstOrDist(doc,cur,"defaultRate");
+                found += FOUND3;
+            }
+
 
 		cur = cur->next;
 	}
-	if (found != (FOUND0 | FOUND1 | FOUND2)) {
+	if (found != (FOUND0 | FOUND1 | FOUND2 | FOUND3)) {
 		fprintf(stderr, "failure parsing connparms\n");
 		exit(-1000);
 	}
@@ -370,45 +442,96 @@ static void parseInitialQuantities(xmlDocPtr doc, xmlNodePtr cur) {
 }
 
 
+// static void parsePrices(xmlDocPtr doc, xmlNodePtr cur){
+// 	cur=cur->xmlChildrenNode;
+// 	int foundPCost,foundMCost,foundMiCost;
+// 	foundPCost = foundMCost = foundMiCost = 0;
+// 	while (cur !=NULL) {
+// 			if(!foundPCost)
+// 				{prices.proteinCost = getXMLnumeric(doc,cur,"proteinCost");foundPCost=1;}
+// 			if(!foundMCost)
+// 				{prices.mRNAcost = getXMLnumeric(doc,cur,"mRNACost");foundMCost=1;}
+// 			if(!foundMiCost)
+// 				{prices.miRNAcost = getXMLnumeric(doc, cur, "miRNACost");foundMiCost=1;}
+
+// 		cur=cur->next;
+// 	}
+
+// 	if (foundPCost && foundMCost && foundMiCost){
+// 		return;
+// 	}else {
+// 		fprintf(stderr,"failure parsing connparms\n");
+// 		exit(-1000);
+// 	}
+
+// }
+
+
+
+// static void parseSystem(xmlDocPtr doc,xmlNodePtr cur) {
+// 	cur = cur->xmlChildrenNode;
+// 	int foundncycles = 0;
+// 	while (cur !=NULL) {
+// 		if(!foundmiRsActive)
+// 			{miRNAs_active = getXMLint(doc,cur,"miRNAs_active");foundmiRsActive=1;}
+// 		if(!foundncycles)
+// 			{n_cycles = getXMLint(doc, cur, "n_cycles");foundncycles=1;}
+// 		cur = cur->next;
+// 	}
+
+// }
+
+
+static void print_element_names(xmlNode * a_node) {
+	xmlNodePtr cur_node;
+
+	for (cur_node = a_node; cur_node; cur_node = cur_node->next) {
+		if (cur_node->type == XML_ELEMENT_NODE) {
+			//printf("node type: Element,name: %s\n",cur_node->name);
+			//key = xmlNodeListGetString(doc,cur_node->xmlChildrenNode,1);
+		}
+		print_element_names(cur_node->children);
+	}
+}
 
 #define CONNPARMWARNINGFMTSTRING  "Warning: %s connection degree %s for by %s = %d > %s = %zd\t defaulting to %s\n"
 
-static void checkConnParmsValidity_(struct ConnectionParametersUnit * parms, genesDims *gD) {
-	ulong_type hiVal;
-	if (parms == NULL)
-	{fprintf(stderr,"not initialized parms");exit(-272);}
-	const char * hiValName;
-	if (parms->connTp == PROTEIN) {
-		if (parms->byInOrOut == INDEGREE)
-		{hiVal = gD->nProt; hiValName = "nProt";}
-		else
-		{hiVal = gD->nDNA; hiValName = "nDNA";}
-	}
-	else if (parms->connTp == MICRO) {
-		if (parms->byInOrOut == INDEGREE)
-		{hiVal = gD->nMicro; hiValName = "nMicro";}
-		else
-		{hiVal = gD->nMess; hiValName = "nMess";}
-	}
-	const char * degType = (parms->byInOrOut == OUTDEGREE) ? "Outdegree" : "Indegree";
-	if (parms->deg_high > hiVal){
-		fprintf(stderr,CONNPARMWARNINGFMTSTRING,
-			parms->connTp == MICRO ? "miRNA" : "TF","high",degType,parms->deg_high,hiValName,hiVal,hiValName);
-		exit(-782);
-	}
-	if (parms->deg_low > hiVal){
-		fprintf(stderr,CONNPARMWARNINGFMTSTRING,
-			parms->connTp == MICRO ? "miRNA" : "TF","low",degType,parms->deg_low,hiValName,hiVal,hiValName);
-		exit(-783);	
-	}
+// static void checkConnParmsValidity_(struct ConnectionParametersUnit * parms, genesDims *gD) {
+// 	ulong_type hiVal;
+// 	if (parms == NULL)
+// 	{fprintf(stderr,"not initialized parms");exit(-272);}
+// 	const char * hiValName;
+// 	if (parms->connTp == PROTEIN) {
+// 		if (parms->byInOrOut == INDEGREE)
+// 		{hiVal = gD->nProt; hiValName = "nProt";}
+// 		else
+// 		{hiVal = gD->nDNA; hiValName = "nDNA";}
+// 	}
+// 	else if (parms->connTp == MICRO) {
+// 		if (parms->byInOrOut == INDEGREE)
+// 		{hiVal = gD->nMicro; hiValName = "nMicro";}
+// 		else
+// 		{hiVal = gD->nMess; hiValName = "nMess";}
+// 	}
+// 	const char * degType = (parms->byInOrOut == OUTDEGREE) ? "Outdegree" : "Indegree";
+// 	if (parms->deg_high > hiVal){
+// 		fprintf(stderr,CONNPARMWARNINGFMTSTRING,
+// 			parms->connTp == MICRO ? "miRNA" : "TF","high",degType,parms->deg_high,hiValName,hiVal,hiValName);
+// 		exit(-782);
+// 	}
+// 	if (parms->deg_low > hiVal){
+// 		fprintf(stderr,CONNPARMWARNINGFMTSTRING,
+// 			parms->connTp == MICRO ? "miRNA" : "TF","low",degType,parms->deg_low,hiValName,hiVal,hiValName);
+// 		exit(-783);	
+// 	}
 
-}
+// }
 
 
 static void check_parameters_validity() {
-	checkConnParmsValidity_(system_parameters.connParms.miRConns, &globalDims);
-	checkConnParmsValidity_(system_parameters.connParms.tfCodingConns, &globalDims);
-	checkConnParmsValidity_(system_parameters.connParms.tfNoncodingConns,&globalDims);
+//	checkConnParmsValidity_(system_parameters.connParms.miRConns, &globalDims);
+//	checkConnParmsValidity_(system_parameters.connParms.tfCodingConns, &globalDims);
+//	checkConnParmsValidity_(system_parameters.connParms.tfNoncodingConns,&globalDims);
 }
 
 
@@ -459,11 +582,6 @@ void initializeParameters(const char * cwd) {
 
 }
 
-void destroyParameters() {
-	free(system_parameters.connParms.miRConns);
-	free(system_parameters.connParms.tfCodingConns);
-	free(system_parameters.connParms.tfNoncodingConns);
-}
 
 
 // void printParms() {
@@ -479,65 +597,120 @@ void destroyParameters() {
 
 
 
-//The following several functions provide default values for assoc/dissoc if none given
-effect_t_rp miREffectStrength(effect_t_rp *r){return (r) ? *r : system_parameters.rates.micro.effectStrength;}
-rate_t_rp TFAffinity(rate_t_rp *r){return (r) ? *r : system_parameters.rates.tf.affinity;}
+
+#include <openssl/md5.h>
+
+
+
+unsigned char * networkParamHash(unsigned char includeNetGenSeed) {
+	static unsigned char humanReadableHash[2 * MD5_DIGEST_LENGTH + 1];
+	static unsigned char parameterHash[MD5_DIGEST_LENGTH];
+	MD5_CTX context;
+	char filename[MAX_JSON_FILENAME];
+	sprintf(filename,"%s/config.xml",".");
+	FILE *configfile= fopen(filename, "r");
+	ulong_type length;
+	char * strIn;
+	FILE * fp = fopen(filename,"rb");
+	fseek(fp, 0, SEEK_END);
+	length = ftell(fp);
+	fseek(fp,0,SEEK_SET);
+	strIn = malloc(length+1);
+	fread(strIn,1,length,fp);
+    strIn[length]='\0';
+	fclose(fp);
+	
+	MD5_Init(&context);
+	const char * tags[] = {"globalDimensions","connectionParameters","baseRates","initialQuantities","kinetics"};
+	char *pTagStart,*pTagEnd;
+	int i;
+	for(i=0;i<5;i++){
+		pTagStart =strstr(strIn,tags[i]);
+		pTagEnd = strstr(pTagStart+1,tags[i]);
+
+		MD5_Update(&context, pTagStart, pTagEnd-pTagStart);
+	}
+	if (includeNetGenSeed){
+		pTagStart=strstr(strIn,"networkGenSeed");
+		pTagEnd=strstr(pTagStart+1,"networkGenSeed");
+		MD5_Update(&context, pTagStart,pTagEnd-pTagStart);
+	}
+	
+	MD5_Final(parameterHash, &context);
+	free(strIn);
+	unsigned char letters[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+	for (i = 0; i < MD5_DIGEST_LENGTH - 1; i++)
+	{
+		humanReadableHash[2 * i] = letters[parameterHash[i] / 52];
+		humanReadableHash[2 * i + 1] = letters[parameterHash[i] % 52];
+	}
+	humanReadableHash[2 * MD5_DIGEST_LENGTH] = 0;
+	return humanReadableHash;
+}
+
+effect_t_rp miRProdEffectStrength(const effect_t_rp * r){return (r) ? *r : 
+getValueFromSysParam(system_parameters.rates.micro.prodEffectStrength);}
+effect_t_rp miRDecayEffectStrength(const effect_t_rp * r){return (r) ? *r : 
+getValueFromSysParam(system_parameters.rates.micro.decayEffectStrength);}
+//effect_t_rp miRProdEffectStrength(effect_t_rp *r){return (r) ? *r : system_parameters.rates.micro.prodEffectStrength;}
+//effect_t_rp miRDecayEffectStrength(effect_t_rp *r){return (r) ? *r : system_parameters.rates.micro.decayEffectStrength;}
+rate_t_rp TFAffinity(const rate_t_rp *r){return (r) ? *r : getValueFromSysParam(system_parameters.rates.tf.affinity);}
 #include "../include/randomnumbers.h"
-effect_t_rp TFEffectStrength(effect_t_rp *r){if (r) return *r; 
-	effect_t_rp effect;
-	 randomUniformNumberArray(1, system_parameters.rates.tf.effectMin, 
-	 	system_parameters.rates.tf.effectMax, &effect);
+effect_t_rp TFEffectStrength(const effect_t_rp *r){
+	if (r){ 
+		return *r; 
+	}
+	double effect =getValueFromSysParam(system_parameters.rates.tf.effectSize);
 	return effect;}
 
-rate_t_rp messengerProductionRate(rate_t_rp *r){
-	return (r) ? *r : system_parameters.rates.mess.production;
+rate_t_rp messengerProductionRate(const rate_t_rp *r){
+	return (r) ? *r : getValueFromSysParam(system_parameters.rates.mess.production);
 }
-rate_t_rp microProductionRate(rate_t_rp *r){
-	return (r) ? *r : system_parameters.rates.micro.production;
+rate_t_rp microProductionRate(const rate_t_rp *r){
+	return (r) ? *r : getValueFromSysParam(system_parameters.rates.micro.production);
 }
-rate_t_rp proteinProductionRate(rate_t_rp *r){
-	return (r) ? *r : system_parameters.rates.tf.production;
+rate_t_rp proteinProductionRate(const rate_t_rp *r){
+	return (r) ? *r : getValueFromSysParam(system_parameters.rates.tf.production);
 }
-rate_t_rp messengerDecayRate(rate_t_rp *r){
-	return (r) ? *r : system_parameters.rates.mess.decay;
+rate_t_rp messengerDecayRate(const rate_t_rp *r){
+	return (r) ? *r : getValueFromSysParam(system_parameters.rates.mess.decay);
 }
-rate_t_rp microDecayRate(rate_t_rp *r){
-	return (r) ? *r : system_parameters.rates.micro.decay;
+rate_t_rp microDecayRate(const rate_t_rp *r){
+	return (r) ? *r : getValueFromSysParam(system_parameters.rates.micro.decay);
 }
-rate_t_rp proteinDecayRate(rate_t_rp *r){
-	return (r) ? *r : system_parameters.rates.tf.decay;
+rate_t_rp proteinDecayRate(const rate_t_rp *r){
+	return (r) ? *r : getValueFromSysParam(system_parameters.rates.tf.decay);
 }
 
-
-rate_t_rp miRAssocConst(rate_t_rp *assoc){
+rate_t_rp miRAssocConst(const rate_t_rp *assoc){
 	if (assoc)
 		return *assoc;
-	rate_t_rp scale = system_parameters.rates.micro.frequency;
-	rate_t_rp aff = system_parameters.rates.micro.affinity;
+	rate_t_rp scale = getValueFromSysParam(system_parameters.rates.micro.frequency);
+	rate_t_rp aff = getValueFromSysParam(system_parameters.rates.micro.affinity);
 	return (2.0*scale*aff)/(1.0+aff);
 }
 
-rate_t_rp miRDissocConst(rate_t_rp * dissoc){
+rate_t_rp miRDissocConst(const rate_t_rp * dissoc){
 	if (dissoc)
 		return *dissoc;
-	rate_t_rp scale = system_parameters.rates.micro.frequency;
-	rate_t_rp aff = system_parameters.rates.micro.affinity;
+	rate_t_rp scale = getValueFromSysParam(system_parameters.rates.micro.frequency);
+	rate_t_rp aff = getValueFromSysParam(system_parameters.rates.micro.affinity);
 	return (2.0*scale)/(1.0+aff);
 }
 
-rate_t_rp TFAssocConst(rate_t_rp *assoc){
+rate_t_rp TFAssocConst(const rate_t_rp *assoc){
 	if (assoc)
 		return *assoc;
-	rate_t_rp scale = system_parameters.rates.tf.frequency;
-	rate_t_rp aff = system_parameters.rates.tf.affinity;
+	rate_t_rp scale = getValueFromSysParam(system_parameters.rates.tf.frequency);
+	rate_t_rp aff = getValueFromSysParam(system_parameters.rates.tf.affinity);
 	return (2.0*scale*aff)/(1.0+aff);
 }
 
-rate_t_rp TFDissocConst(rate_t_rp * dissoc){
+rate_t_rp TFDissocConst(const rate_t_rp * dissoc){
 	if (dissoc)
 		return *dissoc;
-	rate_t_rp scale = system_parameters.rates.tf.frequency;
-	rate_t_rp aff = system_parameters.rates.tf.affinity;
+	rate_t_rp scale = getValueFromSysParam(system_parameters.rates.tf.frequency);
+	rate_t_rp aff = getValueFromSysParam(system_parameters.rates.tf.affinity);
 	return (2.0*scale)/(1.0+aff);
 }
 
@@ -570,14 +743,7 @@ UnsignedIntArray getRandomConnectionNumbersForElements(unsigned int leftLen, uns
 	UnsignedIntArray toRet;
 	unsigned int nElems = (parms->byInOrOut == INDEGREE) ? leftLen : rightLen;
 	toRet = UnsignedIntArray_alloc(nElems);
-	if ((left == MESSENGER) && BIMODAL_MIRNA_RP){
-
-		randomBimodalBinomialArray(nElems, parms->deg_low, parms->deg_high, parms->effect_prob, 
-			BIMODAL_P2_RP * parms->effect_prob, BIMODAL_SELECT_RP, toRet.data);
-	}else{
-
-		randomBinomialArray(nElems, parms->deg_low, parms->deg_high, parms->effect_prob, toRet.data);
-	}
+    getRandomDiscrete(getStream(),nElems,parms->connectionDistribution,toRet.data);
 	return toRet;
 }
 
@@ -593,4 +759,88 @@ ulong_type getInitialQty(species_t sp){
 		case TFDNA: return 0;
 		default: exit(-267398);
 	}
+}
+
+void ConstOrCtsDistribution_Free(ConstOrCtsDistribution ** toFree){
+    ConstOrCtsDistribution * loc = *toFree;
+    if(loc){
+
+    if(loc->isConst == -1){
+        if(loc->distn){
+            CompoundContinuousDistribution_free(loc->distn);
+            free(loc->distn);
+        }
+        loc->distn = NULL;        
+    }else if (loc->isConst == 1){
+        loc->rate = 0.0;
+
+    }else{
+        fprintf(stderr,"trying to free compoundcts which is not initialized\n");
+        exit(45436);
+    }
+        loc->isConst = 0;
+        free(loc);
+    }
+    *toFree = NULL;
+}
+
+
+static void ConnectionParametersUnit_free(struct ConnectionParametersUnit **toFree){
+    if(*toFree){
+    if((*toFree)->connectionDistribution)
+	{
+        CompoundDiscreteDistribution_free((*toFree)->connectionDistribution);
+        free((*toFree)->connectionDistribution);
+        (*toFree)->connectionDistribution = NULL;
+    }
+	(*toFree)->connTp = UNDEFINED;
+    free(*toFree);
+    *toFree = NULL;
+    }
+}
+static void connectionParameters_free(connectionParameters *toFree){
+    ConnectionParametersUnit_free(&toFree->miRConns);
+    ConnectionParametersUnit_free(&toFree->tfCodingConns);
+    ConnectionParametersUnit_free(&toFree->tfNoncodingConns);
+	
+}
+
+static void TFRates_free(struct TFRates * toFree){
+     ConstOrCtsDistribution_Free(&toFree->production);
+    ConstOrCtsDistribution_Free(&toFree->decay);
+    ConstOrCtsDistribution_Free(&toFree->affinity);
+    ConstOrCtsDistribution_Free(&toFree->frequency);
+    ConstOrCtsDistribution_Free(&toFree->effectSize);
+
+}
+
+static void MicroRates_free(struct MicroRates * toFree){
+     ConstOrCtsDistribution_Free(&toFree->production);
+    ConstOrCtsDistribution_Free(&toFree->decay);
+    ConstOrCtsDistribution_Free(&toFree->affinity);
+    ConstOrCtsDistribution_Free(&toFree->frequency);
+    ConstOrCtsDistribution_Free(&toFree->prodEffectStrength);
+    ConstOrCtsDistribution_Free(&toFree->decayEffectStrength);
+    //toFree->production =toFree->decay =toFree->affinity =toFree->frequency =
+      //  toFree->prodEffectStrength =toFree->decayEffectStrength = NULL;
+}
+
+static void MessRates_free(struct MessRates * toFree){
+    ConstOrCtsDistribution_Free(&toFree->production);
+    ConstOrCtsDistribution_Free(&toFree->decay);
+    //toFree->production = toFree->decay = NULL;
+}
+
+static void defaultRates_free(struct defaultRates * toFree){
+    MessRates_free(&toFree->mess);
+    MicroRates_free(&toFree->micro);
+    TFRates_free(&toFree->tf);
+    ConstOrCtsDistribution_Free(&toFree->defaultRate);
+}
+
+
+void destroyParameters() {
+	connectionParameters_free(&system_parameters.connParms);
+    defaultRates_free(&system_parameters.rates);
+    memset(&system_parameters.initialQtys,0,sizeof(system_parameters.initialQtys));
 }

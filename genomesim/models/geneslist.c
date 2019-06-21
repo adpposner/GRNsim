@@ -1,18 +1,3 @@
-// geneslist.c - functions for geneslist init and I/O
-/*
-    
-    Copyright (C) 2018, Russell Posner
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-*/
 #include "../include/globals.h"
 #include "../include/parameters.h"
 #include "../include/models/geneslist.h"
@@ -20,7 +5,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-
+//fix this
 #include "../include/models/basicgeneticelement.h"
 #include "../include/models/basicgeneticelement_p.h"
 
@@ -36,6 +21,8 @@ GenesListIterator getGenesListIters(GenesList * g){
 	toRet.bIt.curr=toRet.bIt.start;
 	return toRet;
 }
+
+ulong_type nMessengers(GenesList * g){return g->nMess;}
 
 ulong_type nMicro_total(GenesList * g){ return g->nMicro;}
 
@@ -185,6 +172,7 @@ void genesList_free(GenesList * tofree)
 	ProducerArray_free(&tofree->producers);
 	ModulatorArray_free(&tofree->modulators);
 	BoundElementArray_free(&tofree->bounds);
+	//GenesList emptyList;
 	initialQuantities_free(tofree->ICs);
 	free(tofree->ICs);
 	free(tofree);
@@ -193,6 +181,12 @@ void genesList_free(GenesList * tofree)
 
 
 
+// static GenesList genesList_base_init(const ulong_type nMess,const ulong_type nMicro)
+// {
+// 	//GenesList toRet = {.nMess = nMess, .nMicro = nMicro, .nProt = nMess, .nDNA = nMess + nMicro};
+// 	GenesList * toRet = genesList_alloc(nMess, nMicro, 0, 0);
+// 	return *toRet;
+// }
 
 void genesList_bound_quantities_init(GenesList *g, const ulong_type nMessMir, const ulong_type nTFDNA){
 	assert(g->nMessMir == 0);
@@ -249,7 +243,7 @@ GenesList * genesList_base_generate(ulong_type nMess, ulong_type nMicro)
 	return toRet;
 }
 
-//Generation of initial quantities, presumably from json file
+//Generation of initial quantities presumably from json file
 void extractInitialQuantities(GenesList * g){
 	if(!g->ICs)
 		initialQuantities_alloc(g);
